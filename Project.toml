@@ -1,0 +1,4 @@
+name = "autrans"
+uuid = "1f02543f-5e56-4038-b276-ee84bbffedc8"
+authors = ["atthom <thom.jalabert@gmail.com>"]
+version = "0.1.0"
