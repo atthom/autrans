@@ -2,3 +2,15 @@ name = "autrans"
 uuid = "1f02543f-5e56-4038-b276-ee84bbffedc8"
 authors = ["atthom <thom.jalabert@gmail.com>"]
 version = "0.1.0"
+
+[deps]
+Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
+ConstraintSolver = "e0e52ebd-5523-408d-9ca3-7641f1cd1405"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+GLPK = "60bf3e95-4087-53dc-ae20-288a0d20c6a6"
+JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
+Optim = "429524aa-4258-5aef-a3af-852621145aeb"
+PrettyTables = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
+ProgressBars = "49802e3a-d2f1-5c88-81d8-b72133a6f568"
+Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
+StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"

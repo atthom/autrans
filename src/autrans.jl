@@ -1,6 +1,6 @@
 module autrans
 
-
+using ProgressBars
 using Distributions: maximum
 using Chain
 using StatsBase
@@ -15,8 +15,6 @@ function fitness(schedule, verbose=false)
     job_size = fill(2, length(per_job))
     balanced_work = (per_job .- job_size).^2
     balanced_work = 1000 * sum(balanced_work)
-
-    
 
     spread = @chain schedule begin
         cumsum(_, dims=1)
@@ -34,10 +32,6 @@ function fitness(schedule, verbose=false)
     return -balanced_work -balance^2  -2*spread
 end
 
-# 0,0 => 0
-# 1, 0 => 1
-# 0, 1 => 1
-# 1, 1 => 0
 rand_mutate(schedule, p_mutate) = schedule .⊻ rand(Bernoulli(p_mutate), size(schedule))
 
 function rand_permute(schedule)
@@ -75,81 +69,32 @@ populate(schedule, p_mutate, nb) = [mutate(schedule, p_mutate) for i in 1:nb]
 
 min_max(v) = (v .- minimum(v)) / (maximum(v) - minimum(v))
 
-selection(schedules) = @chain schedules begin
-    fitness.(_)
-    min_max
-    Bernoulli.(_)
-    rand.(_)
-    zip(_, schedules)
-    collect
-    filter(x -> x[1], _)
-    map(x -> x[2], _)
+selection(schedules, pop_min) = @chain schedules fitness.(_) min_max wsample(schedules, _, pop_min)
+
+function generation(schedules, p_mutate, pop_min, pop_max)
+    selected = selection(schedules, pop_min)
+
+    return @chain selected begin
+        sample(_, pop_max - pop_min, replace=true)
+        mutate.(_, p_mutate)
+        vcat(selected, _)
+    end
 end
-
-function generation(schedules, p_mutate, pop_max)
-   selected = selection(schedules)
-   ll = length(selected)
-   while length(selected) < pop_max
-       one = selected[rand(1:ll)]
-       new_gen = populate(one, p_mutate, 20)
-       selected = vcat(selected, new_gen)
-   end
-   return selected
-end
-
-
-function exec2()
-   nb_days = 7
-   nb_task_per_day = 5
-   nb_pers_per_work = 2 
-   nb_workers = 8
-   schedule1 = fill(false, (nb_days*nb_task_per_day, nb_workers))
-   schedule2 = fill(true, (nb_days*nb_task_per_day, nb_workers))
-   schedules = [schedule1, schedule2]
-   
-   nb_generation = 5000
-   p_mutate = 0.01
-   pop_max = 1000
-   
-   for i in 1:nb_generation
-       scores = fitness.(schedules)
-       m, med = maximum(scores), median(scores)
-       println("gen: $i, max: $m, median: $med")
-       if m == med 
-        println("max: == median")
-        break
-       end
-       schedules = generation(schedules, p_mutate, pop_max)
-   end
-   
-   return @chain schedules begin
-        fitness.(_)
-        zip(_, schedules)
-        collect
-        sort(_, by= x-> x[1], rev=true)
-        _[1]
-   end
-end
-
 
 
 @enum TypeTask begin
-    cuisine
-    vaiselle
- end
+   cuisine
+   vaiselle
+end
  
- @enum TypeTime begin
-    matin
-    midi
-    soir
- end
- 
+@enum TypeTime begin
+   matin
+   midi
+   soir
+end
 
-function pprint(schedule)
-    workers = [:thomas, :chronos, :curt, :astor, :manal, :thibs, :laura, :benj]
-    nb_days = 7
-    nb_task_per_day = 5
-    
+
+function pprint(schedule, workers, days)
     works_per_day = @chain instances(TypeTime) begin
       (_, instances(TypeTask))
       Iterators.product(_...)
@@ -158,8 +103,7 @@ function pprint(schedule)
       _[2:end]
     end
 
-    ll = length(works_per_day)
-    p_schedule = [Symbol[] for i in 1:ll, j in 1:nb_days]
+    p_schedule = [Symbol[] for i in 1:length(works_per_day), j in 1:days]
 
     workers_per_task = @chain schedule begin
         findall(!iszero, _)
@@ -171,12 +115,37 @@ function pprint(schedule)
         push!(p_schedule[idx], w)
     end
 
-    header = ["Jour $i" for i in 1:nb_days]
+    p_schedule = [join(li, ", ", " et ") for li in p_schedule]
+
+    header = ["Jour $i" for i in 1:days]
     pretty_table(p_schedule, header, row_names=works_per_day)
+end
+
+function find_schedule(workers, days; pers_per_work=2, task_per_day=5, nb_generation = 5000, p_mutate = 0.01, pop_min = 500, pop_max = 1000)
+    nb_workers = length(workers)
+    schedule1 = fill(false, (days*task_per_day, nb_workers))
+    schedules = [schedule1, schedule1 .+ true]
+    
+    iter = ProgressBar(1:nb_generation)
+    for i in iter
+        scores = fitness.(schedules)
+        m, med = maximum(scores), median(scores)
+        set_description(iter, "Maximum: $m, Median: $med")
+
+        if m == med 
+            println("max == median population, early stopping")
+            break
+        end
+        schedules = generation(schedules, p_mutate, pop_min, pop_max)
+    end
+
+    return @chain schedules sort(_, by=fitness, rev=true) pprint(_[1], workers, days)
+end
 
 end
 
+# [:thomas, :chronos, :curt, :astor, :manal, :thibs, :laura, :benj]
 
-res = exec2()
+#res = exec2()
 
-pprint(res[2])
+#pprint(res[2])
