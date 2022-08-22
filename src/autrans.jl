@@ -8,7 +8,6 @@ using Distributions
 using PrettyTables
 
 function fitness(schedule, days, task_per_day, pers_per_work, verbose=false)
-    print("c")
     per_worker = sum(schedule, dims=1)
     nb_workers = length(per_worker)
     per_job = sum(schedule, dims=2)
@@ -64,12 +63,13 @@ min_max(v) = (v .- minimum(v)) / (maximum(v) - minimum(v))
 
 standard(v) = (v .- minimum(v)) / std(v)
 
-@inline selection(schedules, days, task_per_day, pers_per_work, pop_min) = @chain schedules fitness.(_, days, task_per_day, pers_per_work) standard wsample(schedules, _, pop_min)
+@inline selection(schedules, fitness_score, pop_min) = @chain fitness_score standard wsample(schedules, _, pop_min)
 
 function generation(schedules, days, task_per_day, pers_per_work, pop_min, pop_max)
-    selected = selection(schedules, days, task_per_day, pers_per_work, pop_min)
+    fitness_score = fitness.(schedules, days, task_per_day, pers_per_work)
+    selected = selection(schedules, fitness_score, pop_min)
 
-    return @chain selected begin
+    return fitness_score, @chain selected begin
         sample(_, pop_max - pop_min, replace=true)
         permute.(_)
         vcat(selected, _)
@@ -125,10 +125,11 @@ end
 function find_schedule(workers, days; pers_per_work=2, task_per_day=5, nb_generation = 5000, p_mutate = 0.01, pop_min = 500, pop_max = 1000)
     nb_workers = length(workers)
     schedules = first_generation(days, task_per_day, nb_workers, pers_per_work, pop_max)
+    scores = fitness.(schedules, days, task_per_day, pers_per_work)
+
     
     iter = ProgressBar(1:nb_generation)
     for i in iter
-        scores = fitness.(schedules, days, task_per_day, pers_per_work)
         m, med = maximum(scores), median(scores)
         set_description(iter, "Maximum: $m, Median: $med")
 
@@ -136,7 +137,7 @@ function find_schedule(workers, days; pers_per_work=2, task_per_day=5, nb_genera
             println("max == median population, early stopping")
             break
         end
-        schedules = generation(schedules, days, task_per_day, pers_per_work, pop_min, pop_max)
+        scores, schedules = generation(schedules, days, task_per_day, pers_per_work, pop_min, pop_max)
     end
 
     return @chain schedules sort(_, by= x -> fitness(x, days, task_per_day, pers_per_work), rev=true) pprint(_[1], workers, days)
