@@ -57,6 +57,20 @@ function rand_permute(schedule)
     return p_schedule
 end
 
+function permute(schedule)
+    new_schedule = copy(schedule)
+    l, w = size(new_schedule)
+    xx = rand(1:l, 2)
+    yy = rand(1:w, 2)
+    x1 = CartesianIndex(xx[1], yy[1])
+    x2 = CartesianIndex(xx[2], yy[2])
+
+    tmp = new_schedule[x1]
+    new_schedule[x1] = new_schedule[x2]
+    new_schedule[x2] = new_schedule[x1]
+    return new_schedule
+end
+
 function mutate(schedule, p_mutate)
     if rand() < 0.3
         return rand_mutate(schedule, p_mutate)
@@ -68,8 +82,9 @@ end
 populate(schedule, p_mutate, nb) = [mutate(schedule, p_mutate) for i in 1:nb]
 
 min_max(v) = (v .- minimum(v)) / (maximum(v) - minimum(v))
+standard(v) = (v .- minimum(v)) / std(v)
 
-selection(schedules, pop_min) = @chain schedules fitness.(_) min_max wsample(schedules, _, pop_min)
+selection(schedules, pop_min) = @chain schedules fitness.(_) standard wsample(schedules, _, pop_min)
 
 function generation(schedules, p_mutate, pop_min, pop_max)
     selected = selection(schedules, pop_min)
@@ -77,6 +92,7 @@ function generation(schedules, p_mutate, pop_min, pop_max)
     return @chain selected begin
         sample(_, pop_max - pop_min, replace=true)
         mutate.(_, p_mutate)
+        #permute.(_)
         vcat(selected, _)
     end
 end
@@ -121,10 +137,20 @@ function pprint(schedule, workers, days)
     pretty_table(p_schedule, header, row_names=works_per_day)
 end
 
+function first_generation(days, task_per_day, nb_workers, pers_per_work, pop_max)
+    schedule1 = fill(false, (days*task_per_day, nb_workers))
+
+    for i in 1:days*task_per_day
+        schedule1[1:pers_per_work] .= true
+    end
+    return [permute(schedule1) for i in 1:pop_max]
+end
+
 function find_schedule(workers, days; pers_per_work=2, task_per_day=5, nb_generation = 5000, p_mutate = 0.01, pop_min = 500, pop_max = 1000)
     nb_workers = length(workers)
-    schedule1 = fill(false, (days*task_per_day, nb_workers))
-    schedules = [schedule1, schedule1 .+ true]
+    #schedule1 = fill(false, (days*task_per_day, nb_workers))
+    #schedules = [schedule1, schedule1 .+ true]
+    schedules = first_generation(days, task_per_day, nb_workers, pers_per_work, pop_max)
     
     iter = ProgressBar(1:nb_generation)
     for i in iter
