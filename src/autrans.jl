@@ -117,7 +117,7 @@ function find_schedule(workers, days; pers_per_work=2, task_per_day=5, nb_genera
     
     iter = ProgressBar(1:nb_generation)
     for i in iter
-        scores = fitness.(schedules)
+        scores = fitness.(schedules, pers_per_work)
         m, med = maximum(scores), median(scores)
         set_description(iter, "Maximum: $m, Median: $med")
 
@@ -128,7 +128,7 @@ function find_schedule(workers, days; pers_per_work=2, task_per_day=5, nb_genera
         schedules = generation(schedules, pers_per_work, pop_min, pop_max)
     end
 
-    return @chain schedules sort(_, by=fitness, rev=true) pprint(_[1], workers, days)
+    return @chain schedules sort(_, by= x -> fitness(x,pers_per_work), rev=true) pprint(_[1], workers, days)
 end
 
 end
