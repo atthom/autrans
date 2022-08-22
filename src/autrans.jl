@@ -7,29 +7,40 @@ using StatsBase
 using Distributions
 using PrettyTables
 
-function fitness(schedule, pers_per_work, verbose=false)
+function fitness(schedule, days, task_per_day, pers_per_work, verbose=false)
+    print("c")
     per_worker = sum(schedule, dims=1)
+    nb_workers = length(per_worker)
     per_job = sum(schedule, dims=2)
    
-    #balance = maximum(per_worker) - minimum(per_worker)
+    balance = (maximum(per_worker) - minimum(per_worker))*nb_workers
     job_size = fill(pers_per_work, length(per_job))
     balanced_work = (per_job .- job_size).^2
     balanced_work = 500 * sum(balanced_work)
 
     spread = @chain schedule begin
-        cumsum(_, dims=1)
-        _[5:5:end, :]
-        diff(_, dims=1)
-        _ .- fill(1, size(_))
-        _ .* _
-        sum
+        reshape(_, (days, task_per_day, nb_workers))
+        sum(_, dims=1)
+        reshape(_, (5, 8))
+        maximum(_, dims=1) - minimum(_, dims=1) .+ 1
+        prod
     end
+
+    # reshape(sum(reshape(r, (5, 5, 8)), dims=1), (5, 8))
+    #spread = @chain schedule begin
+    #    cumsum(_, dims=1)
+    #    _[task_per_day:task_per_day:end, :]
+    #    diff(_, dims=1)
+    #    _ .- fill(1, size(_))
+    #    _ .* _
+    #    sum
+    #end
 
     if verbose
-        println("$balanced_work, $spread")
+        println("$balanced_work, $balance, $spread")
     end
 
-    return -balanced_work -2*spread
+    return -balanced_work -balance^2 -spread
 end
 
 rand_mutate(schedule, p_mutate) = schedule .⊻ rand(Bernoulli(p_mutate), size(schedule))
@@ -53,10 +64,10 @@ min_max(v) = (v .- minimum(v)) / (maximum(v) - minimum(v))
 
 standard(v) = (v .- minimum(v)) / std(v)
 
-selection(schedules, pers_per_work, pop_min) = @chain schedules fitness.(_, pers_per_work) standard wsample(schedules, _, pop_min)
+@inline selection(schedules, days, task_per_day, pers_per_work, pop_min) = @chain schedules fitness.(_, days, task_per_day, pers_per_work) standard wsample(schedules, _, pop_min)
 
-function generation(schedules, pers_per_work, pop_min, pop_max)
-    selected = selection(schedules, pers_per_work, pop_min)
+function generation(schedules, days, task_per_day, pers_per_work, pop_min, pop_max)
+    selected = selection(schedules, days, task_per_day, pers_per_work, pop_min)
 
     return @chain selected begin
         sample(_, pop_max - pop_min, replace=true)
@@ -117,7 +128,7 @@ function find_schedule(workers, days; pers_per_work=2, task_per_day=5, nb_genera
     
     iter = ProgressBar(1:nb_generation)
     for i in iter
-        scores = fitness.(schedules, pers_per_work)
+        scores = fitness.(schedules, days, task_per_day, pers_per_work)
         m, med = maximum(scores), median(scores)
         set_description(iter, "Maximum: $m, Median: $med")
 
@@ -125,10 +136,10 @@ function find_schedule(workers, days; pers_per_work=2, task_per_day=5, nb_genera
             println("max == median population, early stopping")
             break
         end
-        schedules = generation(schedules, pers_per_work, pop_min, pop_max)
+        schedules = generation(schedules, days, task_per_day, pers_per_work, pop_min, pop_max)
     end
 
-    return @chain schedules sort(_, by= x -> fitness(x,pers_per_work), rev=true) pprint(_[1], workers, days)
+    return @chain schedules sort(_, by= x -> fitness(x, days, task_per_day, pers_per_work), rev=true) pprint(_[1], workers, days)
 end
 
 end
