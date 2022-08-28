@@ -7,33 +7,38 @@ using StatsBase
 using Distributions
 using PrettyTables
 
-function fitness(schedule, days, task_per_day, pers_per_work, verbose=false)
+
+
+
+@enum TypeTask begin
+    cuisine
+    vaiselle
+ end
+  
+ @enum TypeTime begin
+    matin
+    midi
+    soir
+ end
+
+ 
+function fitness(schedule, days, task_per_day, pers_per_work, verbose=false)::Float64
+    nb_jobs, nb_workers = size(schedule)
+
     per_worker = sum(schedule, dims=1)
-    nb_workers = length(per_worker)
     per_job = sum(schedule, dims=2)
    
     balance = (maximum(per_worker) - minimum(per_worker))*nb_workers
-    job_size = fill(pers_per_work, length(per_job))
-    balanced_work = (per_job .- job_size).^2
-    balanced_work = 500 * sum(balanced_work)
+
+    balanced_work = 100*sum((per_job .- pers_per_work) .^2)
 
     spread = @chain schedule begin
         reshape(_, (days, task_per_day, nb_workers))
         sum(_, dims=1)
-        reshape(_, (5, 8))
+        reshape(_, (task_per_day, nb_workers))
         maximum(_, dims=1) - minimum(_, dims=1) .+ 1
         prod
     end
-
-    # reshape(sum(reshape(r, (5, 5, 8)), dims=1), (5, 8))
-    #spread = @chain schedule begin
-    #    cumsum(_, dims=1)
-    #    _[task_per_day:task_per_day:end, :]
-    #    diff(_, dims=1)
-    #    _ .- fill(1, size(_))
-    #    _ .* _
-    #    sum
-    #end
 
     if verbose
         println("$balanced_work, $balance, $spread")
@@ -44,14 +49,13 @@ end
 
 rand_mutate(schedule, p_mutate) = schedule .⊻ rand(Bernoulli(p_mutate), size(schedule))
 
-
 function permute(schedule)
     new_schedule = copy(schedule)
     l, w = size(new_schedule)
     xx = rand(1:l, 2)
-    yy = rand(1:w, 2)
-    x1 = CartesianIndex(xx[1], yy[1])
-    x2 = CartesianIndex(xx[2], yy[2])
+    yy = rand(1:w)
+    x1 = CartesianIndex(xx[1], yy)
+    x2 = CartesianIndex(xx[2], yy)
 
     tmp = new_schedule[x1]
     new_schedule[x1] = new_schedule[x2]
@@ -59,34 +63,59 @@ function permute(schedule)
     return new_schedule
 end
 
+function fitness2(schedules, days, task_per_day, pers_per_work, verbose=false)
+    nb_schedules = length(schedules)
+    nb_workers = size(schedules[end])[2]
+    
+    all_schedules = reshape(vcat(schedules...), (nb_schedules, days, task_per_day, nb_workers))
+
+    schedule_sumday = sum(all_schedules, dims=2)
+    
+    per_worker = reshape(sum(schedule_sumday, dims=3), (nb_schedules, nb_workers))
+    per_job = reshape(sum(all_schedules, dims=4), (nb_schedules, days*task_per_day))
+    
+    balance = (maximum(per_worker, dims=2) - minimum(per_worker, dims=2))*nb_workers
+    job_size = fill(pers_per_work, (nb_schedules, days*task_per_day))
+
+    balanced_work = (per_job .- job_size).^2
+    balanced_work = 500 * sum(balanced_work, dims=2)
+
+    if verbose
+        println("$balanced_work, $balance")
+    end
+    return -balanced_work[:, 1] - balance[:, 1]
+end
+
 min_max(v) = (v .- minimum(v)) / (maximum(v) - minimum(v))
 
 standard(v) = (v .- minimum(v)) / std(v)
 
-@inline selection(schedules, fitness_score, pop_min) = @chain fitness_score standard wsample(schedules, _, pop_min)
+selection(schedules, fitness_score, pop_min) = @chain fitness_score standard wsample(schedules, _, pop_min)
+
+
+selectionXX(schedules, fitness_score, pop_min) = @chain fitness_score begin
+    partialsortperm(_, 1:pop_min, rev=true) 
+    schedules[_]
+end
+
 
 function generation(schedules, days, task_per_day, pers_per_work, pop_min, pop_max)
-    fitness_score = fitness.(schedules, days, task_per_day, pers_per_work)
-    selected = selection(schedules, fitness_score, pop_min)
+    schedules = unique(schedules)
+    fitness_score::Vector{Float64} = fitness.(schedules, days, task_per_day, pers_per_work)
+
+    if length(schedules) > pop_min
+        selected = selectionXX(schedules, fitness_score, pop_min)
+    else
+        selected = schedules
+    end
 
     return fitness_score, @chain selected begin
         sample(_, pop_max - pop_min, replace=true)
-        permute.(_)
+        permuteX.(_)
         vcat(selected, _)
     end
 end
 
-
-@enum TypeTask begin
-   cuisine
-   vaiselle
-end
- 
-@enum TypeTime begin
-   matin
-   midi
-   soir
-end
 
 
 function pprint(schedule, workers, days)
@@ -130,17 +159,19 @@ function find_schedule(workers, days; pers_per_work=2, task_per_day=5, nb_genera
     
     iter = ProgressBar(1:nb_generation)
     for i in iter
-        m, med = maximum(scores), median(scores)
-        set_description(iter, "Maximum: $m, Median: $med")
-
-        if m == med 
+        m, q1, q2, q3, minn = maximum(scores), quantile(scores, 0.25), quantile(scores, 0.50), quantile(scores, 0.75),  minimum(scores)
+        set_description(iter, "Maximum: $m, q1: $q1, q2: $q2, q3: $q3, minn: $minn")
+        #if mod(i, 1) == 0
+        #    println("$i, $(length(scores)), $m, $med")
+        #end
+        if m == q2 
             println("max == median population, early stopping")
             break
         end
         scores, schedules = generation(schedules, days, task_per_day, pers_per_work, pop_min, pop_max)
     end
 
-    return @chain schedules sort(_, by= x -> fitness(x, days, task_per_day, pers_per_work), rev=true) pprint(_[1], workers, days)
+    return @chain schedules sort(_, by= x -> fitness(x, days, task_per_day, pers_per_work), rev=true) _[1] # pprint(_[1], workers, days)
 end
 
 end
