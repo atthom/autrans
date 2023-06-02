@@ -1,13 +1,13 @@
-name = "autrans"
+name = "Autrans"
 uuid = "1f02543f-5e56-4038-b276-ee84bbffedc8"
 authors = ["atthom <thom.jalabert@gmail.com>"]
 version = "0.1.0"
 
 [deps]
 Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Metaheuristics = "bcdb8e00-2c21-11e9-3065-2b553b22f898"
-Oxygen = "df9a0d86-3283-4920-82dc-4555fc0d1d8b"
 PrettyTables = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
 ProgressBars = "49802e3a-d2f1-5c88-81d8-b72133a6f568"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
