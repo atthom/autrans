@@ -5,7 +5,9 @@ using DataFrames
 using Metaheuristics
 using Distributions: maximum
 using Chain
+using PrettyTables
 
+export SmallSchedule, fitness, pprint, optimize
 
 
 include("structures.jl")
