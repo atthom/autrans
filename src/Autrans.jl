@@ -7,7 +7,7 @@ using Distributions: maximum
 using Chain
 using PrettyTables
 
-export SmallSchedule, fitness, pprint, optimize
+export SmallSchedule, fitness, pprint, optimize, make_df
 
 
 include("structures.jl")

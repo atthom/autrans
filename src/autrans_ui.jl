@@ -25,7 +25,7 @@ function handlers(model)
         #@info model
         schedule = SmallSchedule(model.days[], model.task_per_day[], model.worker_per_task[], model.workers[])
         @info schedule
-        result = optimize(x -> fitness(x, schedule), schedule)
+        result = optimize(schedule)
         @info fitness(result, schedule, true)
         model.schedule_output[] = DataTable(make_df(schedule, result))
 

@@ -27,9 +27,11 @@ function fitness(result, s, verbose=false)
 end
 
 
-function Metaheuristics.optimize(f::Function, s::SmallSchedule)
-    gg = GA(;N = 1000, initializer = RandomPermutation(N=1000))
-    opti_set = optimize(f, Searchpath(s), gg)
+function Metaheuristics.optimize(s::SmallSchedule)
+    gg = GA(;N = 100, initializer = RandomPermutation(N=100))
+    opti_set = Metaheuristics.optimize(x -> fitness(x, s), Searchpath(s), gg)
+    @info opti_set
+    @info minimizer(opti_set)
     return minimizer(opti_set)
 end
 
@@ -87,12 +89,9 @@ function pprint(s::SmallSchedule, result)
     ll = length(works_per_day)
     p_schedule = [String[] for i in 1:ll, j in 1:s.days]
 
-    @info schedule
     workers_per_task = @chain schedule begin
         findall(!iszero, _)
-        @aside @info _
         Tuple.(_)
-        @aside @info _
         map(x -> (s.workers[x[2]], x[1]), _)
     end
     
@@ -101,12 +100,8 @@ function pprint(s::SmallSchedule, result)
     end
 
     p_schedule = map(li -> join(li, ", "), p_schedule)
-
     header = ["Jour $i" for i in 1:s.days]
-    @info s.days
-    @info header
-    pretty_table(p_schedule; header=header, row_names=works_per_day)
 
-    # 
+    pretty_table(p_schedule; header=header, row_labels=works_per_day)
     # return pretty_table(String, p_schedule; backend = Val(:html), header=header, row_names=works_per_day)
 end
