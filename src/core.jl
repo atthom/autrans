@@ -52,8 +52,8 @@ end
 
 function make_df(s::SmallSchedule, result)
     schedule = reshape(result, s)
-    works_per_day = ["Task $i" for i in 1:s.task_per_day]
-    tasks = DataFrame(Task=works_per_day)
+    works_per_day = ["Tache $i" for i in 1:s.task_per_day]
+    tasks = DataFrame(Tache=works_per_day)
 
     p_schedule = [String[] for i in 1:s.task_per_day, j in 1:s.days]
     workers_per_task = @chain schedule begin
