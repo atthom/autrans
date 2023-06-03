@@ -9,6 +9,13 @@ spread(schedule, task_per_day) = @chain schedule begin
     sum
 end
 
+spread2(schedule) = @chain schedule begin
+    accumulate((a,b)-> !b ? 0 : a+b, _; dims=1)
+    maximum(_, dims=1)
+    maximum(_) - minimum(_)
+    _^2
+end
+
 function fitness(result, s, verbose=false)
     schedule = reshape(result, (s.days*s.task_per_day, s.nb_workers))
     per_worker = sum(schedule, dims=1)
@@ -23,12 +30,12 @@ function fitness(result, s, verbose=false)
         println("balanced_work=$balanced_work, balance=$balance, spread=$spread")
     end
 
-    return 10*balanced_work + 5*balance + 2*spread(schedule, s.task_per_day)
+    return 10*balanced_work + 5*balance + 2*spread2(schedule)
 end
 
 
 function Metaheuristics.optimize(s::SmallSchedule)
-    gg = GA(;N = 1000, initializer = RandomPermutation(N=100))
+    gg = GA(;N = 1000, initializer = RandomPermutation(N=1000))
     opti_set = Metaheuristics.optimize(x -> fitness(x, s), Searchpath(s), gg)
     #@info opti_set
     #@info minimizer(opti_set)
