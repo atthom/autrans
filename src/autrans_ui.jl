@@ -24,13 +24,16 @@ function handlers(model)
 
     onbutton(model.form_submit) do
         #@info model
+        t1 = time() * 1000
         schedule = SmallSchedule(model.days[], model.task_per_day[], model.worker_per_task[], model.workers[])
         @info schedule
         result = optimize(schedule)
-        @info fitness(result, schedule, true)
+        score = fitness(result, schedule, true)
         model.schedule_output[] = DataTable(make_df(schedule, result))
-
         model.form_submit[] = false
+
+        t2 = time() * 1000
+        @info "Final Score: $score; Call Duration: $(round(Int, t2 - t1))ms"
     end
 
     model
@@ -38,7 +41,7 @@ end
 
 function generate_form()
     card(class = "schedule_settings", style="padding: 15px", [
-        card_section(h4("Option Planning"))
+        card_section(h4("Option"))
         
         StippleUI.form(action = "/sub", method = "POST", [
   
@@ -66,7 +69,7 @@ function ui()
   row(cell(class = "st-module", [
     cell(class="header", align="center", style="margin-bottom: 40px", [
       h1("Autrans")
-      h3("Petit outil de Planning Sympa")
+      h3("Petit Outil De Planning Sympa")
     ])
     
     row([
