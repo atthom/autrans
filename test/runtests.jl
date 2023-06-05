@@ -25,9 +25,7 @@ end
     quick_test(7, 13, 3,  ["W$i" for i in 1:7], 18)
     quick_test(7, 2, 1,  ["W$i" for i in 1:14], 12)
     quick_test(7, 1, 2,  ["W$i" for i in 1:14], 12)
-
     quick_test(7, 1, 1,  ["Cookie", "Fish"], 5)
     quick_test(7, 1, 4,  ["Cookie", "Fish"], 280)
-
     quick_test(7, 3, 13,  ["W$i" for i in 1:14], 92)
 end

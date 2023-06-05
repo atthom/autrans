@@ -1,5 +1,4 @@
 
-
 @vars ViewSchedule begin
   days::R{Int} = 7
   task_per_day::R{Int} = 5
@@ -11,8 +10,6 @@
   page::R{DataTablePagination} = DataTablePagination(rows_per_page=50)
 end
 
-
-
 function handlers(model)
     on(model.isready) do isready
         isready || return
@@ -23,7 +20,6 @@ function handlers(model)
     end
 
     onbutton(model.form_submit) do
-        #@info model
         t1 = time() * 1000
         schedule = SmallSchedule(model.days[], model.task_per_day[], model.worker_per_task[], model.workers[])
         @info schedule
@@ -41,23 +37,23 @@ end
 
 function generate_form()
     card(class = "schedule_settings", style="padding: 15px", [
-        card_section(h4("Option"))
+        card_section(h4("Settings"))
         
         StippleUI.form(action = "/sub", method = "POST", [
   
-          numberfield("Nombre de jours *", :days, name = "days", "filled", :lazy__rules,
+          numberfield("Number of days *", :days, name = "days", "filled", :lazy__rules,
             rules = " [val => val !== null && val !== '' || 'Please type the number of days',
               val => val > 0 || 'Non negative number']"
           ),
-          numberfield("Tâche par jour *", :task_per_day, name = "task_per_day", "filled", :lazy__rules,
+          numberfield("Task per day *", :task_per_day, name = "task_per_day", "filled", :lazy__rules,
             rules = " [val => val !== null && val !== '' || 'Please type the number of task per day',
               val => val > 0 || 'Non negative number']"
           ),
-          numberfield("PD par tache *", :worker_per_task, name = "worker_per_task", "filled", :lazy__rules,
+          numberfield("People by task *", :worker_per_task, name = "worker_per_task", "filled", :lazy__rules,
             rules = " [val => val !== null && val !== ''  || 'Please type the number of worker per task']"
           ),
   
-          Stipple.select(:workers, label="Mais qui?", options=:options,
+          Stipple.select(:workers, label="People", options=:options,
             multiple=true, clearable = false, dense=false, usechips = true,
             newvaluemode="add-unique", useinput=true, dropdownicon="none"),
           ])
@@ -69,17 +65,17 @@ function ui()
   row(cell(class = "st-module", [
     cell(class="header", align="center", style="margin-bottom: 40px", [
       h1("Autrans")
-      h3("Petit Outil De Planning Sympa")
+      h3("Cool & Simple Scheduling Tool")
     ])
     
     row([
-        cell(class="schedule_settings_cell", size=2,  [
+        cell(class="schedule_settings_cell", size=2, [
           generate_form()
         ])
-        cell(class="Schedule Table", size=9, style="margin-left: 50px", [
+        cell(class="Time Table", size=9, style="margin-left: 50px", [
           # h3("Time Table", align="center")
           card(class = "schedule", [
-          table(title="Planning", :schedule_output; pagination=:page)
+          table(title="Time Table", :schedule_output; pagination=:page)
           ])
         ])
 
@@ -90,7 +86,7 @@ end
 
 route("/") do
   model = ViewSchedule |> init |> handlers
-  page(model, class = "container", ui(), title = "Autrans") |> Stipple.html
+  page(model, class = "container", ui(), title = "Autrans") |> html
 end
 
 Genie.isrunning(:webserver) || up()
