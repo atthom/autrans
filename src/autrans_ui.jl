@@ -20,7 +20,7 @@ function handlers(model)
     end
 
     onbutton(model.form_submit) do
-        t1 = time() * 1000
+        t1 = Base.time() * 1000
         schedule = SmallSchedule(model.days[], model.task_per_day[], model.worker_per_task[], model.workers[])
         @info schedule
         result = optimize(schedule)
@@ -28,7 +28,7 @@ function handlers(model)
         model.schedule_output[] = DataTable(make_df(schedule, result))
         model.form_submit[] = false
 
-        t2 = time() * 1000
+        t2 = Base.time() * 1000
         @info "Final Score: $score; Call Duration: $(round(Int, t2 - t1))ms"
     end
 

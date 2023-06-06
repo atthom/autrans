@@ -1,16 +1,4 @@
 
-
-@enum TypeTask begin
-    cuisine
-    vaiselle
- end
- 
-@enum TypeTime begin
-    matin
-    midi
-    soir
-end
-
 struct SmallSchedule
     days::Int
     task_per_day::Int
