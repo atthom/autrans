@@ -6,7 +6,7 @@
   workers::R{Vector{String}} = ["Cookie", "Fish", "Chronos"]
   options::R{Vector{String}} = []
   form_submit::R{Bool} = false
-  schedule_output::R{DataTable} = DataTable(DataFrame(Tache=[], PD=[]))
+  schedule_output::R{DataTable} = DataTable(DataFrame(Tache=[], Worker=[]))
   page::R{DataTablePagination} = DataTablePagination(rows_per_page=50)
 end
 
