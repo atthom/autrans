@@ -5,6 +5,7 @@ struct SmallSchedule
     worker_per_work::Int
     workers::Vector{String}
     nb_workers::Int
+    subspace::Vector{Vector{Bool}}
 end
 
 struct SmallTask
@@ -19,12 +20,12 @@ struct SmallWorker
 end
 
 
-SmallSchedule(days::Int, task_per_day::Int, worker_per_work::Int, workers::Vector{String}) = SmallSchedule(days, task_per_day, worker_per_work, workers, length(workers))
-
-
+SmallSchedule(days::Int, task_per_day::Int, worker_per_work::Int, workers::Vector{String}) = SmallSchedule(days, task_per_day, worker_per_work, workers, length(workers), [])
 #Searchpath(s::SmallSchedule) = BitArraySpace(s.days*s.task_per_day*s.nb_workers)
-Searchpath(s::SmallSchedule) = MixedSpace(s)
 
+setSubSpace(s, subspace::Vector{Vector{Bool}}) = SmallSchedule(s.days, s.task_per_day, s.worker_per_work, s.workers, length(s.workers), subspace)
+
+total_task(s::SmallSchedule) = s.task_per_day*s.days
 
 function SearchpathPermutation(s::SmallSchedule) 
     number_of_slots = s.days*s.task_per_day*s.worker_per_work
@@ -33,24 +34,29 @@ function SearchpathPermutation(s::SmallSchedule)
     return PermutationSpace(vcat(true_slots, false_slots))
 end
 
-#Base.reshape(result, s::SmallSchedule) = reshape(result, (s.days*s.task_per_day, s.nb_workers))
-Base.reshape(result, s::SmallSchedule) = reshape(vcat(result...), (s.days*s.task_per_day, s.nb_workers))
+function SearchPathBoxConstraint(s::SmallSchedule)
+    slots = fill(false, s.nb_workers)
+    slots[1:s.worker_per_work] .= 1
 
+    subspace = multiset_permutations(slots, s.nb_workers) |> collect
+    s = setSubSpace(s, subspace)
+    problem_size = ones(Int, total_task(s))
 
-cardinality(s::SmallSchedule) = BigInt(2)^(s.days*s.task_per_day*s.nb_workers)
-
-
-function cardinality2(s::SmallSchedule) 
-    n = BigInt(s.days*s.task_per_day*s.nb_workers)
-    k = BigInt(s.days*s.task_per_day*s.worker_per_work)
-    @info n, k
-    return card(n, k)
+    return s, boxconstraints(problem_size,  length(subspace) .* problem_size)
 end
 
+Base.reshape(result, s::SmallSchedule) = reshape(vcat(s.subspace[result]...), (s.days*s.task_per_day, s.nb_workers))
 
-card(n, k) = factorial(n) / (factorial(k)*factorial(n - k))
-
-using Combinatorics
+function cardinality(s::SmallSchedule) 
+    if s.nb_workers == s.worker_per_work
+        return 1
+    end
+    if s.nb_workers < s.worker_per_work
+        return 0
+    end
+    subspace = binomial(s.nb_workers, s.worker_per_work)
+    return BigInt(s.days)^subspace
+end
 
 
 function SearchPathMultiSetPermutation(s::SmallSchedule)
@@ -58,40 +64,5 @@ function SearchPathMultiSetPermutation(s::SmallSchedule)
     slots[1:s.worker_per_work] .= 1
 
     subspace = multiset_permutations(slots, s.nb_workers) |> collect
-    length(subspace)
     return PermutationSpace(1:length(subspace), s.days*s.task_per_day)
-end
-
-
-function MixedSpace(s::SmallSchedule)
-    slots = fill(false, s.nb_workers)
-    slots[1:s.worker_per_work] .= 1
-
-    all_spaces = Dict(Symbol(i) => PermutationSpace(slots) for i in 1:s.days*s.task_per_day)
-    return MixedSpace(all_spaces...)
-end
-
-
-function find_exact(s::SmallSchedule)
-    slots = fill(false, s.nb_workers)
-    slots[1:s.worker_per_work] .= 1
-
-    subspace = multiset_permutations(slots, s.nb_workers) |> collect
-
-
-    
-
-
-    best, best_score = [], 10e10 
-    for current_res in with_replacement_combinations(subspace, s.days*s.task_per_day)
-        current_res = vcat(current_res...)
-        current_score = fitness(current_res, s)
-        if current_score < best_score
-            best = current_res
-            best_score = current_score
-        end
-    end
-
-    @info best, score
-
 end

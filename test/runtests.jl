@@ -3,10 +3,20 @@ using Autrans
 
 function quick_test(days, n1, n2, workers, shouldbe)
     schedule = SmallSchedule(days, n1, n2, workers)
-    result = optimize(schedule)
-    @info fitness(result, schedule)
+    schedule, searchspace = SearchPathBoxConstraint(schedule)
+    result = optimize(schedule, searchspace)
     @test fitness(result, schedule) <= shouldbe
 end
+
+
+function test_cardinality(days, n1, n2, workers, shouldbe)
+    schedule = SmallSchedule(days, n1, n2, workers)
+    
+    c = cardinality(schedule)
+    @test c == shouldbe
+end
+
+
 
 @testset "test_exact" begin
     quick_test(7, 2, 2,  ["Cookie", "Fish"], 0)
@@ -17,15 +27,22 @@ end
     quick_test(7, 1, 1,  ["W$i" for i in 1:7], 0)
     quick_test(7, 1, 2,  ["W$i" for i in 1:7], 0)
     quick_test(7, 2, 1,  ["W$i" for i in 1:7], 0)
+    quick_test(7, 2, 1,  ["W$i" for i in 1:14], 0)
+    quick_test(7, 1, 2,  ["W$i" for i in 1:14], 0)
 end
 
 
 
 @testset "test_inexact" begin
-    quick_test(7, 13, 3,  ["W$i" for i in 1:7], 18)
-    quick_test(7, 2, 1,  ["W$i" for i in 1:14], 12)
-    quick_test(7, 1, 2,  ["W$i" for i in 1:14], 12)
-    quick_test(7, 1, 1,  ["Cookie", "Fish"], 5)
-    quick_test(7, 1, 4,  ["Cookie", "Fish"], 280)
+    quick_test(7, 13, 3,  ["W$i" for i in 1:7], 580)
     quick_test(7, 3, 13,  ["W$i" for i in 1:14], 92)
+    quick_test(7, 1, 1,  ["Cookie", "Fish"], 5)
+end
+
+@testset "test_impossible" begin
+    test_cardinality(7, 1, 2,  ["Cookie"], 0)
+    test_cardinality(7, 1, 4,  ["Cookie", "Fish"], 0)
+    test_cardinality(7, 2, 2,  ["Cookie", "Fish"], 1)
+    test_cardinality(7, 1, 1,  ["Cookie"], 1)
+    test_cardinality(7, 1, 2,  ["Cookie", "Fish"], 1)
 end

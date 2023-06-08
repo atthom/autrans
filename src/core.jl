@@ -1,34 +1,58 @@
-spread2(schedule) = @chain schedule begin
-    accumulate((a,b)-> !b ? 0 : a+b, _; dims=1)
-    maximum(_, dims=1)
-    maximum(_) - minimum(_)
-    _^2
-end
 
 function fitness(result, s, verbose=false)
     schedule = reshape(result, s)
     per_worker = sum(schedule, dims=1)
-    per_job = sum(schedule, dims=2)
-   
-    balance = maximum(per_worker) - minimum(per_worker)
-    job_size = fill(s.worker_per_work, length(per_job))
-    balanced_work = (per_job .- job_size).^2
-    balanced_work = sum(balanced_work)
 
-    spread = spread2(schedule)
+    per_worker_balance = maximum(per_worker) - minimum(per_worker)
+    #per_job = sum(schedule, dims=2)
+    #job_size = fill(s.worker_per_work, length(per_job))
+    #balanced_work = (per_job .- job_size).^2
+    #balanced_work = sum(balanced_work)
 
-    if verbose
-        println("balanced_work=$balanced_work, balance=$balance, spread=$spread")
+    spread = @chain schedule begin
+        accumulate((a,b)-> !b ? 0 : a+b, _; dims=1)
+        maximum(_, dims=1)
+        maximum(_) - minimum(_)
+        _^2
     end
 
-    return 10*balanced_work + 5*balance + 2*spread2(schedule)
+    if verbose
+        #println("balanced_work=$balanced_work, balance=$per_worker_balance, spread=$spread")
+        println("balance=$per_worker_balance, spread=$spread")
+    end
+
+    #return 10*balanced_work + 5*per_worker_balance + 2*spread2(schedule)
+    return 5*per_worker_balance + 2*spread
 end
 
+function Metaheuristics.optimize(s::SmallSchedule, searchspace)
+    gg = GA(;N = 1000, mutation=SlightMutation())
 
-function Metaheuristics.optimize(s::SmallSchedule)
-    gg = GA(;N = 1000, initializer = RandomPermutation(N=1000))
-    opti_set = Metaheuristics.optimize(x -> fitness(x, s), Searchpath(s), gg)
+    opti_set = Metaheuristics.optimize(x -> fitness(x, s), searchspace, gg)
     return minimizer(opti_set)
+end
+
+function find_schedule(days, task_per_day, worker_per_task, workers)
+    t1 = Base.time() * 1000
+    schedule = SmallSchedule(days, task_per_day, worker_per_task, workers)
+    c = cardinality(schedule)
+    
+    if c == 0
+        return DataFrames(Workers=workers, Days=[])
+    end
+
+    schedule, searchspace = SearchPathBoxConstraint(schedule)
+
+    if c == 1
+        result = sample(searchspace, 1)
+    else
+        result = optimize(schedule, searchspace)
+    end
+    
+    score = fitness(result, schedule, true)
+    t2 = Base.time() * 1000
+    @info "Final Score: $score; Difficulty=$c Call Duration: $(round(Int, t2 - t1))ms"
+    return make_df(schedule, result)
 end
 
 function make_df(s::SmallSchedule, result)

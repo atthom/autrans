@@ -5,9 +5,11 @@ using DataFrames
 using Metaheuristics
 using Distributions: maximum
 using Chain
+using Combinatorics
 using PrettyTables
+using Combinatorics
 
-export SmallSchedule, fitness, pprint, optimize, make_df
+export SmallSchedule, fitness, pprint, optimize, make_df, find_schedule, SearchPathBoxConstraint, cardinality
 
 
 include("structures.jl")
