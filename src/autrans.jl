@@ -9,7 +9,7 @@ using Combinatorics
 using PrettyTables
 using Combinatorics
 
-export SmallSchedule, fitness, pprint, optimize, make_df, find_schedule, SearchPathBoxConstraint, cardinality
+export SmallSchedule, fitness, optimize, find_schedule, search_space, cardinality
 
 
 include("structures.jl")

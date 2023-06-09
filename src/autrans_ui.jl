@@ -3,6 +3,8 @@
   days::R{Int} = 7
   task_per_day::R{Int} = 5
   worker_per_task::R{Int} = 2
+  cutoff_N_first::R{Int} = 0
+  cutoff_N_last::R{Int} = 0
   workers::R{Vector{String}} = ["Cookie", "Fish", "Chronos"]
   options::R{Vector{String}} = []
   form_submit::R{Bool} = false
@@ -31,29 +33,37 @@ function handlers(model)
 end
 
 function generate_form()
-    card(class = "schedule_settings", style="padding: 15px", [
-        card_section(h4("Settings"))
-        
-        StippleUI.form(action = "/sub", method = "POST", [
-  
-          numberfield("Number of days *", :days, name = "days", "filled", :lazy__rules,
-            rules = " [val => val !== null && val !== '' || 'Please type the number of days',
-              val => val > 0 || 'Non negative number']"
-          ),
-          numberfield("Task per day *", :task_per_day, name = "task_per_day", "filled", :lazy__rules,
-            rules = " [val => val !== null && val !== '' || 'Please type the number of task per day',
-              val => val > 0 || 'Non negative number']"
-          ),
-          numberfield("People by task *", :worker_per_task, name = "worker_per_task", "filled", :lazy__rules,
-            rules = " [val => val !== null && val !== ''  || 'Please type the number of worker per task']"
-          ),
-  
-          Stipple.select(:workers, label="People", options=:options,
-            multiple=true, clearable = false, dense=false, usechips = true,
-            newvaluemode="add-unique", useinput=true, dropdownicon="none"),
-          ])
-          card_section(btn("submit", type = "submit", color = "primary", iconright = "send", @click(:form_submit)))
-      ])
+  card(class = "schedule_settings", style="padding: 15px", [
+    card_section(h4("Settings"))
+    
+    StippleUI.form(action = "/sub", method = "POST", [
+      numberfield("Number of days *", :days, name = "days", "filled", :lazy__rules,
+        rules = " [val => val !== null && val !== '' || 'Please type the number of days',
+          val => val > 0 || 'Non negative number']"
+      ),
+      numberfield("Task per day *", :task_per_day, name = "task_per_day", "filled", :lazy__rules,
+        rules = " [val => val !== null && val !== '' || 'Please type the number of task per day',
+          val => val > 0 || 'Non negative number']"
+      ),
+      numberfield("People by task *", :worker_per_task, name = "worker_per_task", "filled", :lazy__rules,
+        rules = " [val => val !== null && val !== ''  || 'Please type the number of worker per task']"
+      ),
+
+      numberfield("Remove N first tasks", :cutoff_N_first, name = "cutoff_N_first", "filled", :lazy__rules,
+        rules = " [val => val !== null && val !== '']"
+      ),
+
+      numberfield("Remove N last tasks", :cutoff_N_last, name = "cutoff_N_last", "filled", :lazy__rules,
+        rules = " [val => val !== null && val !== '']"
+      ),
+
+      Stipple.select(:workers, label="People", options=:options,
+        multiple=true, clearable = false, dense=false, usechips = true,
+        newvaluemode="add-unique", useinput=true, dropdownicon="none"),
+
+    ])
+    card_section(btn("submit", type = "submit", color = "primary", iconright = "send", @click(:form_submit)))
+  ])
 end
 
 function ui()

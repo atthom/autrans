@@ -6,64 +6,36 @@ struct SmallSchedule
     workers::Vector{String}
     nb_workers::Int
     subspace::Vector{Vector{Bool}}
-end
-
-struct SmallTask
-    worker_per_task::Int
-    per_day::Int
-end
-
-struct SmallWorker
-    name::String
-    preference_task::Vector{SmallTask}
-    preference_worker::Vector{SmallWorker}
+    cutoff_N_first::Int
+    cutoff_N_last::Int
 end
 
 
-SmallSchedule(days::Int, task_per_day::Int, worker_per_work::Int, workers::Vector{String}) = SmallSchedule(days, task_per_day, worker_per_work, workers, length(workers), [])
-#Searchpath(s::SmallSchedule) = BitArraySpace(s.days*s.task_per_day*s.nb_workers)
+SmallSchedule(days::Int, task_per_day::Int, worker_per_work::Int, workers::Vector{String}) = SmallSchedule(days, task_per_day, worker_per_work, workers, length(workers), [], 0, 0)
+SmallSchedule(days::Int, task_per_day::Int, worker_per_work::Int, workers::Vector{String}, N_first::Int, N_last::Int) = SmallSchedule(days, task_per_day, worker_per_work, workers, length(workers), [], N_first, N_last)
 
-setSubSpace(s, subspace::Vector{Vector{Bool}}) = SmallSchedule(s.days, s.task_per_day, s.worker_per_work, s.workers, length(s.workers), subspace)
+Base.reshape(result, s::SmallSchedule) = hcat(s.subspace[result]...)'
 
-total_task(s::SmallSchedule) = s.task_per_day*s.days
+setSubSpace(s::SmallSchedule, subspace::Vector{Vector{Bool}}) = SmallSchedule(s.days, s.task_per_day, s.worker_per_work, s.workers, length(s.workers), subspace, s.cutoff_N_first, s.cutoff_N_last)
 
-function SearchpathPermutation(s::SmallSchedule) 
-    number_of_slots = s.days*s.task_per_day*s.worker_per_work
-    true_slots = fill(true, number_of_slots)
-    false_slots = fill(false, s.days*s.task_per_day*s.nb_workers - number_of_slots)
-    return PermutationSpace(vcat(true_slots, false_slots))
-end
+nb_tasks(s::SmallSchedule) = s.days*s.task_per_day - s.cutoff_N_first - s.cutoff_N_last
 
-function SearchPathBoxConstraint(s::SmallSchedule)
+function search_space(s::SmallSchedule)
     slots = fill(false, s.nb_workers)
     slots[1:s.worker_per_work] .= 1
 
     subspace = multiset_permutations(slots, s.nb_workers) |> collect
     s = setSubSpace(s, subspace)
-    problem_size = ones(Int, total_task(s))
+    problem_size = ones(Int, nb_tasks(s))
 
     return s, boxconstraints(problem_size,  length(subspace) .* problem_size)
 end
 
-#Base.reshape(result, s::SmallSchedule) = reshape(hcat(s.subspace[result]...), (s.days*s.task_per_day, s.nb_workers))
-Base.reshape(result, s::SmallSchedule) = hcat(s.subspace[result]...)'
-
 function cardinality(s::SmallSchedule) 
     if s.nb_workers == s.worker_per_work
         return 1
-    end
-    if s.nb_workers < s.worker_per_work
+    elseif s.nb_workers < s.worker_per_work
         return 0
     end
-    subspace = binomial(s.nb_workers, s.worker_per_work)
-    return BigInt(s.days)^subspace
-end
-
-
-function SearchPathMultiSetPermutation(s::SmallSchedule)
-    slots = fill(false, s.nb_workers)
-    slots[1:s.worker_per_work] .= 1
-
-    subspace = multiset_permutations(slots, s.nb_workers) |> collect
-    return PermutationSpace(1:length(subspace), s.days*s.task_per_day)
+    return BigInt(nb_tasks(s))^binomial(s.nb_workers, s.worker_per_work)
 end
