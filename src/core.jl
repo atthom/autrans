@@ -2,7 +2,6 @@
 function fitness(result, s, verbose=false)
     schedule = reshape(result, s)
     per_worker = sum(schedule, dims=1)
-
     per_worker_balance = maximum(per_worker) - minimum(per_worker)
     #per_job = sum(schedule, dims=2)
     #job_size = fill(s.worker_per_work, length(per_job))
@@ -26,7 +25,8 @@ function fitness(result, s, verbose=false)
 end
 
 function Metaheuristics.optimize(s::SmallSchedule, searchspace)
-    gg = GA(;N = 1000, mutation=SlightMutation())
+    #gg = GA(;N = 100, mutation=SlightMutation())
+    gg = GA(;N = 100, mutation=SlightMutation()) #, initializer = RandomInBounds(N=100), p_mutation =0, mutation=SlightMutation())
 
     opti_set = Metaheuristics.optimize(x -> fitness(x, s), searchspace, gg)
     return minimizer(opti_set)

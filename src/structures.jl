@@ -45,7 +45,8 @@ function SearchPathBoxConstraint(s::SmallSchedule)
     return s, boxconstraints(problem_size,  length(subspace) .* problem_size)
 end
 
-Base.reshape(result, s::SmallSchedule) = reshape(vcat(s.subspace[result]...), (s.days*s.task_per_day, s.nb_workers))
+#Base.reshape(result, s::SmallSchedule) = reshape(hcat(s.subspace[result]...), (s.days*s.task_per_day, s.nb_workers))
+Base.reshape(result, s::SmallSchedule) = hcat(s.subspace[result]...)'
 
 function cardinality(s::SmallSchedule) 
     if s.nb_workers == s.worker_per_work
