@@ -37,5 +37,10 @@ function cardinality(s::SmallSchedule)
     elseif s.nb_workers < s.worker_per_work
         return 0
     end
-    return BigInt(nb_tasks(s))^binomial(s.nb_workers, s.worker_per_work)
+
+    ntasks = nb_tasks(s)
+    if ntasks < 1
+        return 0
+    end
+    return BigInt(ntasks)^binomial(s.nb_workers, s.worker_per_work)
 end

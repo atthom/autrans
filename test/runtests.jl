@@ -51,5 +51,6 @@ end
     quick_test(7, 2, 1,  ["W$i" for i in 1:14], 12; N_first=1, N_last=3)
 
     df = find_schedule(7, 2, 1,  ["W$i" for i in 1:14], 1, 3)
-    @info df
+    df = find_schedule(1, 2, 1,  ["W$i" for i in 1:14], 1, 3)
+    #@info df
 end

@@ -22,9 +22,9 @@ function handlers(model)
     end
 
     onbutton(model.form_submit) do
-
-        df = find_schedule(model.days[], model.task_per_day[], model.worker_per_task[], model.workers[])
-        @info df
+        df = find_schedule(model.days[], model.task_per_day[], 
+                          model.worker_per_task[], model.workers[], 
+                          model.cutoff_N_first[], model.cutoff_N_last[])
         model.schedule_output[] = DataTable(df)
         model.form_submit[] = false
     end
@@ -74,18 +74,16 @@ function ui()
     ])
     
     row([
-        cell(class="schedule_settings_cell", size=2, [
-          generate_form()
-        ])
-        cell(class="Time Table", size=9, style="margin-left: 50px", [
-          # h3("Time Table", align="center")
-          card(class = "schedule", [
-          table(title="Time Table", :schedule_output; pagination=:page)
-          ])
-        ])
-
+      cell(class="schedule_settings_cell", size=2, [
+        generate_form()
       ])
-
+      cell(class="Time Table", size=9, style="margin-left: 50px", [
+        # h3("Time Table", align="center")
+        card(class = "schedule", [
+        table(title="Time Table", :schedule_output; pagination=:page)
+        ])
+      ])
+    ])
   ]))
 end
 

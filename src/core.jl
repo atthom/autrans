@@ -31,7 +31,7 @@ function find_schedule(days::Int, task_per_day::Int, worker_per_task::Int, worke
     c = cardinality(schedule)
     
     if c == 0
-        return DataFrames(Workers=workers, Days=[])
+        return DataFrame(Workers=[], Days=[])
     end
 
     schedule, searchspace = search_space(schedule)
@@ -61,9 +61,11 @@ function make_df(s::SmallSchedule, result)
         map(x -> (s.workers[x[2]], x[1]), _)
     end
     
+
     for (w, idx) in workers_per_task
-        push!(p_schedule[idx], w)
+        push!(p_schedule[idx + s.cutoff_N_first], w)
     end
+
 
     return @chain p_schedule begin
         map(li -> join(li, ", "), _)
