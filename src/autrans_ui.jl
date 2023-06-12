@@ -87,9 +87,20 @@ function ui()
   ]))
 end
 
-route("/") do
-  model = ViewSchedule |> init |> handlers
-  page(model, class = "container", ui(), title = "Autrans") |> html
+
+
+
+function julia_main()::Cint
+  route("/") do
+    model = ViewSchedule |> init |> handlers
+    page(model, class = "container", ui(), title = "Autrans") |> html
+  end
+
+  
+  while true
+    Genie.isrunning(:webserver) || up()
+    sleep(10)
+  end
+  return 0
 end
 
-Genie.isrunning(:webserver) || up()
