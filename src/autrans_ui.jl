@@ -87,20 +87,26 @@ function ui()
   ]))
 end
 
+Genie.config.run_as_server = true
 
 
+route("/") do
+  model = ViewSchedule |> init |> handlers
+  page(model, class = "container", ui(), title = "Autrans") |> html
+end
 
-function julia_main()::Cint
-  route("/") do
-    model = ViewSchedule |> init |> handlers
-    page(model, class = "container", ui(), title = "Autrans") |> html
-  end
 
-  
-  while true
-    Genie.isrunning(:webserver) || up()
-    sleep(10)
-  end
+function main(port, host)::Cint  
+  up(port, host, async = false)
+end
+
+Base.@ccallable function julia_main()::Cint  
+  host = ARGS[1]
+  port = parse(Int, ARGS[2])
+  main(port, host)
+
   return 0
 end
+# create_sysimage(["Autrans"], sysimage_path="Autrans.so")
+# julia --color=yes --depwarn=no --project=@. -q -L bootstrap.jl -J YourProjectName.so – “$@”
 
