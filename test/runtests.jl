@@ -15,7 +15,6 @@ function test_cardinality(days, n1, n2, workers, shouldbe)
     @test c == shouldbe
 end
 
-if false
 @testset "test_exact" begin
     quick_test(7, 2, 2,  ["Cookie", "Fish"], 0)
     quick_test(7, 1, 1,  ["Cookie"], 0)
@@ -44,7 +43,6 @@ end
     test_cardinality(7, 2, 2,  ["Cookie", "Fish"], 1)
     test_cardinality(7, 1, 1,  ["Cookie"], 1)
     test_cardinality(7, 1, 2,  ["Cookie", "Fish"], 1)
-end
 end
 
 @testset "test_inexact_with_cutoff" begin
