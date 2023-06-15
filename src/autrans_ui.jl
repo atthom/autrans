@@ -74,10 +74,10 @@ function ui()
     ])
     
     row([
-      cell(class="schedule_settings_cell", size=2, [
+      cell(class="schedule_settings_cell", xs=12, sm=6, md=2, [
         generate_form()
       ])
-      cell(class="Time Table", size=9, style="margin-left: 50px", [
+      cell(class="Time Table", xs=12, sm=12, md=9, style="margin-left: auto; margin-top: 10px;", [
         # h3("Time Table", align="center")
         card(class = "schedule", [
         table(title="Time Table", :schedule_output; pagination=:page)
