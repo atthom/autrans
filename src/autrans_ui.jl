@@ -90,13 +90,13 @@ end
 Genie.config.run_as_server = true
 
 
-route("/") do
-  model = ViewSchedule |> init |> handlers
-  page(model, class = "container", ui(), title = "Autrans") |> html
-end
-
-
 function main(port, host)::Cint  
+  
+  route("/") do
+    model = ViewSchedule |> init |> handlers
+    page(model, class = "container", ui(), title = "Autrans") |> html
+  end
+
   up(port, host, async = false)
 end
 
