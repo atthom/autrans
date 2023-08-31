@@ -11,6 +11,8 @@ struct SmallSchedule
 end
 
 
+
+
 SmallSchedule(days::Int, task_per_day::Int, worker_per_work::Int, workers::Vector{String}) = SmallSchedule(days, task_per_day, worker_per_work, workers, length(workers), [], 0, 0)
 SmallSchedule(days::Int, task_per_day::Int, worker_per_work::Int, workers::Vector{String}, N_first::Int, N_last::Int) = SmallSchedule(days, task_per_day, worker_per_work, workers, length(workers), [], N_first, N_last)
 
