@@ -45,6 +45,40 @@ function seed(s::Scheduler)
 end
 
 
+function task_indices(s::Scheduler, t::Task)
+    all_indices = Vector{Int}()
+    nb_task_per_day = length(s.task_per_day)
+    for (idx, task) in enumerate(s.task_per_day)
+        if task == t
+            indices = idx:nb_task_per_day:scheduler.total_tasks
+            for i in indices
+                push!(all_indices, i)
+            end
+        end
+    end
+    all_indices = all_indices .- s.cutoff_N_first
+    all_indices = filter(x -> x > 0, all_indices)
+    return all_indices
+end
+
+
+function day_indices(s::Scheduler)
+    all_indices = Vector{UnitRange{Int64}}()
+    nb_jobs = length(s.task_per_day)
+    offset = s.cutoff_N_first
+    
+    for day in 1:nb_jobs:s.total_tasks
+        if day == 1
+            day_idx = 1:nb_jobs-offset
+        else
+            day_idx = day-offset:day+nb_jobs-offset-1
+        end
+        push!(all_indices, day_idx)
+    end
+
+    return all_indices
+end
+
 
 
 struct Teams

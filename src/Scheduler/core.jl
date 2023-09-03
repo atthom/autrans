@@ -2,7 +2,7 @@
 
 function get_neighbors(schedule)
     neighbors = Vector{Matrix{Bool}}()
-    nb_task, nb_workers = size(sseed) 
+    nb_task, nb_workers = size(schedule) 
     for t in 1:nb_task
         all_perm = multiset_permutations(schedule[t, :], nb_workers)
         for perm in all_perm
@@ -17,27 +17,47 @@ function get_neighbors(schedule)
 end
 
 using Chain
+
+
 function fitness(scheduler, schedule, verbose=false)
     per_worker = sum(schedule, dims=1)
     per_worker_balance = maximum(per_worker) - minimum(per_worker)
-    
-    agg_type_df = agg_type(s, schedule)
-    agg_type_df = agg_type_df[!, Not("Tasks")]
-    agg_type_df = Matrix(agg_type_df)
-    
-    agg_type_loss = maximum(agg_type_df, dims=2) - minimum(agg_type_df, dims=2)
+    nb_worker = length(scheduler.workers)
+
+    tasks = unique(scheduler.task_per_day)
+    agg_all_tasks = zeros(Int, (length(tasks), nb_worker))
+    for (id_t, t) in enumerate(tasks)
+        for i in task_indices(scheduler, t)
+            agg_all_tasks[id_t, :] += schedule[i, :]
+        end
+    end
+
+    agg_type_loss = maximum(agg_all_tasks, dims=2) - minimum(agg_all_tasks, dims=2)
     agg_type_loss = agg_type_loss .^ 2
     agg_type_loss = sum(agg_type_loss)
 
-    
-    agg_type_loss2 = maximum(agg_type_df) - minimum(agg_type_df)
+    agg_type_loss2 = maximum(agg_all_tasks) - minimum(agg_all_tasks)
     agg_type_loss2 = agg_type_loss2 ^ 2
     
+    agg_all_days = zeros(Int, (scheduler.days, nb_worker))
+    for (i, d) in enumerate(day_indices(scheduler))
+        agg_all_days[i, :] = sum(schedule[d, :], dims=1)
+    end
+    
+    agg_time_loss = maximum(agg_all_days, dims=2) - minimum(agg_all_days, dims=2)
+    agg_time_loss = agg_time_loss .^ 2
+    agg_time_loss = sum(agg_time_loss)
+
+    agg_time_loss2 = maximum(agg_all_days) - minimum(agg_all_days)
+    agg_time_loss2 = agg_time_loss2 ^ 2
+    
     if verbose
-        println("balance=$per_worker_balance, spread=$work_spread")
+        print("balance=$per_worker_balance, agg_type_loss=$agg_type_loss,")
+        print("agg_type_loss2=$agg_type_loss2, agg_time_loss=$agg_time_loss")
+        println("")
     end
 
-    return 4*per_worker_balance + 2*work_spread
+    return per_worker_balance +agg_type_loss + agg_type_loss2 + agg_time_loss + agg_time_loss2
 end
 
 using DataFrames
@@ -86,12 +106,12 @@ function agg_time(s::Scheduler, schedule)
     end
 
     df = DataFrame(vcat(all_days...), [w.name for w in scheduler.workers])
-    days = DataFrame(Tache=["Jour $i" for i in 1:s.days])
+    days = DataFrame(Days=["Jour $i" for i in 1:s.days])
     return hcat(days, df)
 end
 
 
-function tabu_search(scheduler; nb_gen = 200, maxTabuSize=100)
+function tabu_search(scheduler; nb_gen = 0, maxTabuSize=100)
     best = seed(scheduler)
     bestCandidate = best
     tabu_list = Vector{Matrix{Bool}}()
@@ -100,7 +120,7 @@ function tabu_search(scheduler; nb_gen = 200, maxTabuSize=100)
     while i < nb_gen
         best_fit = 10000000
         all_nei = get_neighbors(bestCandidate)
-        println("gen $i, nei size: $(length(all_nei)), best fitness: $(fitness(scheduler, bestCandidate))")
+        println("gen $i, tabu_size: $(length(tabu_list)) best fitness: $(fitness(scheduler, bestCandidate))")
         for nei in all_nei
             current_fit = fitness(scheduler, nei)
             if nei ∉ tabu_list && current_fit < best_fit
