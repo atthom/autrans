@@ -19,47 +19,47 @@ end
 using Chain
 
 
+
+mse(arr) = @chain arr begin
+    extrema(_, dims=2)
+    map(x -> x[2] - x[1], _)
+    _ .^ 2
+    sum
+end
+
 function fitness(scheduler, schedule, verbose=false)
     per_worker = sum(schedule, dims=1)
     per_worker_balance = maximum(per_worker) - minimum(per_worker)
     nb_worker = length(scheduler.workers)
 
-    tasks = unique(scheduler.task_per_day)
-    agg_all_tasks = zeros(Int, (length(tasks), nb_worker))
-    for (id_t, t) in enumerate(tasks)
-        for i in task_indices(scheduler, t)
-            agg_all_tasks[id_t, :] += schedule[i, :]
-        end
+    agg_all_tasks = zeros(Int, (length(scheduler.all_task_indices), nb_worker))
+
+    for (id_t, (t, indices)) in enumerate(scheduler.all_task_indices)
+        agg_all_tasks[id_t, :] = sum(schedule[indices, :], dims=1)
     end
 
-    agg_type_loss = maximum(agg_all_tasks, dims=2) - minimum(agg_all_tasks, dims=2)
-    agg_type_loss = agg_type_loss .^ 2
-    agg_type_loss = sum(agg_type_loss)
-
-    agg_type_loss2 = maximum(agg_all_tasks) - minimum(agg_all_tasks)
-    agg_type_loss2 = agg_type_loss2 ^ 2
+    agg_type_loss = mse(agg_all_tasks)
     
     agg_all_days = zeros(Int, (scheduler.days, nb_worker))
     for (i, d) in enumerate(day_indices(scheduler))
         agg_all_days[i, :] = sum(schedule[d, :], dims=1)
     end
     
-    agg_time_loss = maximum(agg_all_days, dims=2) - minimum(agg_all_days, dims=2)
-    agg_time_loss = agg_time_loss .^ 2
-    agg_time_loss = sum(agg_time_loss)
-
-    agg_time_loss2 = maximum(agg_all_days) - minimum(agg_all_days)
-    agg_time_loss2 = agg_time_loss2 ^ 2
+    agg_time_loss = mse(agg_all_days)
+    #agg_time_loss = extrema(agg_all_days)
     
+
     if verbose
         print("balance=$per_worker_balance, agg_type_loss=$agg_type_loss,")
         print("agg_type_loss2=$agg_type_loss2, agg_time_loss=$agg_time_loss")
         println("")
     end
 
-    return per_worker_balance +agg_type_loss + agg_type_loss2 + agg_time_loss + agg_time_loss2
+    #return per_worker_balance +agg_type_loss + agg_type_loss2 + agg_time_loss + agg_time_loss2
+    return per_worker_balance + agg_type_loss + agg_time_loss
 end
 
+using Combinatorics
 using DataFrames
 using StatsBase
 using DataStructures
@@ -91,7 +91,6 @@ end
 
 
 function agg_time(s::Scheduler, schedule)
-    tasks_agg = 
     nb_jobs = length(s.task_per_day)
     offset = s.cutoff_N_first
     all_days = []
@@ -111,7 +110,7 @@ function agg_time(s::Scheduler, schedule)
 end
 
 
-function tabu_search(scheduler; nb_gen = 0, maxTabuSize=100)
+function tabu_search(scheduler; nb_gen = 50, maxTabuSize=100)
     best = seed(scheduler)
     bestCandidate = best
     tabu_list = Vector{Matrix{Bool}}()

@@ -19,10 +19,18 @@ struct Scheduler
     total_tasks::Int
     cutoff_N_first::Int
     cutoff_N_last::Int
+    all_task_indices::Vector{Tuple{Task, Vector{Int}}}
 
     function Scheduler(li_workers, task_per_day, days, N_first, N_last) 
         workers = Worker.(li_workers)
-        new(workers, task_per_day, days, length(task_per_day)*days,N_first, N_last)
+        total_task = length(task_per_day)*days
+        all_task_indices = Vector{Tuple{Task, Vector{Int}}}()
+        for t in unique(task_per_day)
+            indices = task_indices(task_per_day, total_task, N_first, t)
+            push!(all_task_indices, (t, indices |> collect))
+        end
+
+        new(workers, task_per_day, days, total_task, N_first, N_last, all_task_indices)
     end
 end
 
@@ -45,18 +53,18 @@ function seed(s::Scheduler)
 end
 
 
-function task_indices(s::Scheduler, t::Task)
+function task_indices(task_per_day::Vector{Task}, total_tasks::Int, cutoff_N_first::Int, t::Task)
     all_indices = Vector{Int}()
-    nb_task_per_day = length(s.task_per_day)
-    for (idx, task) in enumerate(s.task_per_day)
+    nb_task_per_day = length(task_per_day)
+    for (idx, task) in enumerate(task_per_day)
         if task == t
-            indices = idx:nb_task_per_day:scheduler.total_tasks
+            indices = idx:nb_task_per_day:total_tasks
             for i in indices
                 push!(all_indices, i)
             end
         end
     end
-    all_indices = all_indices .- s.cutoff_N_first
+    all_indices = all_indices .- cutoff_N_first
     all_indices = filter(x -> x > 0, all_indices)
     return all_indices
 end
