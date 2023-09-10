@@ -1,37 +1,51 @@
 
-struct Worker
+struct SWorker
     name::String
     days_off::Vector{Int}
 end
-Worker(tp::Tuple{String, Vector{Int}}) = Worker(tp[1], tp[2])
+SWorker(tp::Tuple{String, Vector{Int64}}) = SWorker(tp[1], tp[2])
 
 
-struct Task
+struct STask
     name::String
     worker_slots::Int
+    difficulty::Int
 end
-Task(tp::Tuple{String, Int}) = Task(tp[1], tp[2])
+STask(tp::Tuple{String, Int, Int}) = STask(tp[1], tp[2], tp[3])
 
 struct Scheduler
-    workers::Vector{Worker}
-    task_per_day::Vector{Task}
+    workers::Vector{SWorker}
+    task_per_day::Vector{STask}
     days::Int
     total_tasks::Int
     cutoff_N_first::Int
     cutoff_N_last::Int
-    all_task_indices::Vector{Tuple{Task, Vector{Int}}}
+    all_task_indices::Vector{Tuple{STask, Vector{Int}}}
+    all_task_indices_per_day::Vector{Tuple{STask, Vector{Int}}}
+end
 
-    function Scheduler(li_workers, task_per_day, days, N_first, N_last) 
-        workers = Worker.(li_workers)
-        total_task = length(task_per_day)*days
-        all_task_indices = Vector{Tuple{Task, Vector{Int}}}()
-        for t in unique(task_per_day)
-            indices = task_indices(task_per_day, total_task, N_first, t)
-            push!(all_task_indices, (t, indices |> collect))
-        end
 
-        new(workers, task_per_day, days, total_task, N_first, N_last, all_task_indices)
+function Scheduler(li_workers, task_per_day, days, N_first, N_last) 
+    workers = SWorker.(li_workers)
+    total_task = length(task_per_day)*days
+    all_task_indices = Vector{Tuple{STask, Vector{Int}}}()
+    for t in unique(task_per_day)
+        indices = task_indices(task_per_day, total_task, N_first, t)
+        push!(all_task_indices, (t, indices |> collect))
     end
+
+    all_task_indices_per_day = task_indices_per_day(task_per_day, total_task, N_first)
+
+    return Scheduler(workers, task_per_day, days, total_task, N_first, N_last, all_task_indices, all_task_indices_per_day)
+end
+
+function Scheduler(payload::Dict)
+    n_first, n_last, days = payload["cutoff_N_first"], payload["cutoff_N_first"], payload["days"]
+    tasks = STask.(payload["tasks"])
+
+    task_per_day = [tasks[i] for i in payload["task_per_day"] .+ 1]
+    li_workers = payload["workers"]
+    return Scheduler(li_workers, task_per_day, days, n_first, n_last)
 end
 
 function get_task(s::Scheduler, id::Int)
@@ -53,7 +67,7 @@ function seed(s::Scheduler)
 end
 
 
-function task_indices(task_per_day::Vector{Task}, total_tasks::Int, cutoff_N_first::Int, t::Task)
+function task_indices(task_per_day::Vector{STask}, total_tasks::Int, cutoff_N_first::Int, t::STask)
     all_indices = Vector{Int}()
     nb_task_per_day = length(task_per_day)
     for (idx, task) in enumerate(task_per_day)
@@ -70,6 +84,17 @@ function task_indices(task_per_day::Vector{Task}, total_tasks::Int, cutoff_N_fir
 end
 
 
+function task_indices_per_day(task_per_day::Vector{STask}, total_tasks::Int, cutoff_N_first::Int)
+    all_indices = Vector{Tuple{STask, Vector{Int}}}()
+    nb_task_per_day = length(task_per_day)
+    for (idx, task) in enumerate(task_per_day)
+        indices = idx-cutoff_N_first:nb_task_per_day:total_tasks-cutoff_N_first
+        push!(all_indices, (task, filter(i -> i > 0, indices) |> collect))
+    end
+    return all_indices
+end
+
+
 function day_indices(s::Scheduler)
     all_indices = Vector{UnitRange{Int64}}()
     nb_jobs = length(s.task_per_day)
@@ -77,7 +102,11 @@ function day_indices(s::Scheduler)
     
     for day in 1:nb_jobs:s.total_tasks
         if day == 1
+            # fist day
             day_idx = 1:nb_jobs-offset
+        elseif day-offset == (s.days-1) * nb_jobs
+            # last day
+            day_idx = day-offset:day+nb_jobs-offset-1+s.cutoff_N_last
         else
             day_idx = day-offset:day+nb_jobs-offset-1
         end
@@ -85,18 +114,4 @@ function day_indices(s::Scheduler)
     end
 
     return all_indices
-end
-
-
-
-struct Teams
-    n_worker::Int
-    n_total::Int
-    all_teams::Vector{Vector{Bool}}
-    function Teams(n_total, n_worker) 
-        slots = fill(false, n_total)
-        slots[1:n_worker] .= 1
-
-        new(n_total, n_worker, multiset_permutations(n_total, n_worker) |> collect)
-    end
 end

@@ -24,3 +24,24 @@ function test_new_format()
 
     return scheduler
 end
+
+function test_new_format2()
+
+    payload = Dict(
+        "workers" => [("Chronos", []), ("Jon", []), ("Beurre", []),
+                    ("Fishy", []),("Bendo", []),("Alicia", []),
+                    ("Poulpy", []),("Curt", []),("LeRat", []),
+                    ("Bizard", [6, 7])],
+        "tasks"=> [
+            ("Vaiselle", 2, 1),
+            ("Repas", 2, 1),
+        ],
+        "task_per_day"=> [0, 1, 0, 1, 0],
+        "days"=> 7, 
+        "cutoff_N_first"=>1,
+        "cutoff_N_last"=> 1
+    )
+    scheduler = Scheduler(payload)
+
+    return scheduler
+end
