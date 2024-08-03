@@ -9,39 +9,32 @@ using StatsBase
 
 include("structures.jl")
 include("core.jl")
-
-
-function test_new_format()
-    workers =  ["Chronos","Jon", "Beurre","Fishy","Bendo","Alicia","Poulpy","Curt","LeRat","Bizard"]
-    days_off = repeat([Int[]], length(workers))
-    v = Task("Vaiselle", 2)
-    r = Task("Repas", 2)
-    task_per_day = [v, r, v, r, v]
-    days = 7
-    cutoff_N_first = 1
-    cutoff_N_last = 1
-    scheduler = Scheduler(zip(workers, days_off), task_per_day, days, cutoff_N_first, cutoff_N_last)
-
-    return scheduler
-end
+include("display.jl")
 
 function test_new_format2()
-
     payload = Dict(
-        "workers" => [("Chronos", []), ("Jon", []), ("Beurre", []),
-                    ("Fishy", []),("Bendo", []),("Alicia", []),
-                    ("Poulpy", []),("Curt", []),("LeRat", []),
-                    ("Bizard", [6, 7])],
+        "workers" => [("Chronos", Int[]), ("Jon", Int[]), ("Beurre", Int[]),
+                    ("Fishy", Int[]),("Bendo", Int[]),("Alicia", Int[]),
+                    ("Poulpy", Int[]),("Curt", Int[]),("LeRat", Int[]),
+                    ("Bizard", Int[])],
         "tasks"=> [
             ("Vaiselle", 2, 1),
-            ("Repas", 2, 1),
+            ("Repas", 3, 1),
         ],
         "task_per_day"=> [0, 1, 0, 1, 0],
         "days"=> 7, 
-        "cutoff_N_first"=>1,
+        "cutoff_N_first"=> 2,
         "cutoff_N_last"=> 1
     )
+    
     scheduler = Scheduler(payload)
+ 
+    schedule = tabu_search(scheduler)
+    println(agg_jobs(scheduler, schedule))
+    println(agg_type(scheduler, schedule))
+    println(agg_time(scheduler, schedule))
+    println(agg_display(scheduler, schedule))
+
 
     return scheduler
 end
