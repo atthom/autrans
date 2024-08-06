@@ -8,7 +8,7 @@
   workers::R{Vector{String}} = ["Cookie", "Fish", "Chronos"]
   options::R{Vector{String}} = []
   form_submit::R{Bool} = false
-  schedule_output::R{DataTable} = DataTable(DataFrame(Tache=[], Worker=[]))
+  schedule_output::R{DataTable} = DataTable(DataFrame(Tasks=[], Days=[]))
   page::R{DataTablePagination} = DataTablePagination(rows_per_page=50)
 end
 
@@ -93,11 +93,11 @@ Genie.config.run_as_server = true
 function main(port, host)::Cint  
   
   route("/") do
-    model = ViewSchedule |> init |> handlers
+    model = ViewSchedule |> x -> init(x, transport = Genie.WebThreads) |> handlers
     page(model, class = "container", ui(), title = "Autrans") |> html
   end
 
-  up(port, host, async = false)
+  up(port, host, ws_port=port, async = false)
 end
 
 Base.@ccallable function julia_main()::Cint  

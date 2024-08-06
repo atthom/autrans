@@ -30,7 +30,8 @@ end
 
 function test_new_format()
     workers =  ["Chronos","Jon", "Beurre","Fishy","Bendo","Alicia","Poulpy","Curt","LeRat","Bizard"]
-    days_off = repeat([Int[]], length(workers))
+    days_off = repeat([Int[]], length(workers)-1)
+    push!(days_off, [6, 7])
     v = Task("Vaiselle", 2)
     r = Task("Repas", 2)
     task_per_day = [v, r, v, r, v]

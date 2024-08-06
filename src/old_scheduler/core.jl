@@ -91,7 +91,9 @@ function find_schedule(days::Int, task_per_day::Int, worker_per_task::Int, worke
     c = cardinality(schedule)
     
     if c == 0
-        return DataFrame(Workers=[], Days=[])
+        return DataFrame(Workers=["Error"], Days=["Job is impossible"])
+    elseif c > 200_000_000
+        return DataFrame(Workers=["Error"], Days=["Job is too difficult ($c)"])
     end
 
     schedule, searchspace = search_space(schedule)

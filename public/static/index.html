@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Autrans</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+</head>
+
+<body class style>
+    <div id="Autrans_ViewSchedule" class="container">
+        <div class="row">
+            <div class="st-col col st-module">
+                <div class="st-col col header" align="center" style="margin-bottom: 40px">
+                    <h1>Autrans</h1>
+                    <h3>Cool & Simple Scheduling Tool</h3>
+                </div>
+                <div class="row">
+                    <div class="st-col col col-xs-12 col-sm-6 col-md-2 schedule_settings_cell"><q-card
+                            class="schedule_settings" style="padding: 15px"><q-card-section>
+                                <h4>Settings</h4>
+                            </q-card-section><form method="POST" action="/schedule"><q-input type="number"
+                                    label="Number of days *" v-model.number="days" name="days" :rules=" [val => val !== null && val !== '' || 'Please type the number of days',
+              val => val > 0 || 'Non negative number']" filled lazy-rules></q-input><q-input type="number"
+                                    label="Task per day *" v-model.number="task_per_day" name="task_per_day" :rules=" [val => val !== null && val !== '' || 'Please type the number of task per day',
+              val => val > 0 || 'Non negative number']" filled lazy-rules></q-input><q-input type="number"
+                                    label="People by task *" v-model.number="worker_per_task" name="worker_per_task"
+                                    :rules=" [val => val !== null && val !== ''  || 'Please type the number of worker per task']"
+                                    filled lazy-rules></q-input><q-input type="number" label="Remove N first tasks"
+                                    v-model.number="cutoff_N_first" name="cutoff_N_first"
+                                    :rules=" [val => val !== null && val !== '']" filled lazy-rules></q-input><q-input
+                                    type="number" label="Remove N last tasks" v-model.number="cutoff_N_last"
+                                    name="cutoff_N_last" :rules=" [val => val !== null && val !== '']" filled
+                                    lazy-rules></q-input><q-select dropdown-icon="none" v-model="workers" label="People"
+                                    multiple use-chips new-value-mode="add-unique" :options="options"
+                                    use-input></q-select></q-form><q-card-section><q-btn color="primary" type="submit"
+                                    label="submit" v-on:click="form_submit = true"
+                                    icon-right="send"></q-btn></q-card-section></q-card></div>
+                    <div class="st-col col col-xs-12 col-sm-12 col-md-9 Time Table"
+                        style="margin-left: auto; margin-top: 10px;"><q-card class="schedule"><q-table
+                                :columns="schedule_output.columns" v-model="schedule_output"
+                                :data="schedule_output.data" row-key="__id" :pagination.sync="page"></q-table></q-card>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <link href="https://fonts.googleapis.com/css?family=Material+Icons" rel="stylesheet" />
+    <link href="/stipple.jl/master/assets/css/stipplecore.css" rel="stylesheet" />
+    <link href="/stippleui.jl/master/assets/css/quasar.min.css" rel="stylesheet" />
+    <script src="/stipple.jl/master/assets/js/vue.js"></script>
+    <script src="/stipple.jl/master/assets/js/stipplecore.js"></script>
+    <script src="/stipple.jl/master/assets/js/vue_filters.js" defer></script>
+    <script src="/stipple.jl/master/assets/js/watchers.js"></script>
+    <script src="/stippleui.jl/master/assets/js/quasar.umd.min.js"></script>
+    <script src="/stipple.jl/master/assets/js/autrans_viewschedule.js" defer></script>
+    <script src="/stipple.jl/master/assets/js/keepalive.js" defer></script>
+    <script src="/stipple.jl/master/assets/js/underscore-min.js"></script>
+
+    <!--
+    <script>window.CHANNEL = 'MYHNOVRVGVCNIISNMGMDMXQMRQWYCMSB';</script>
+
+    -->
+</body>
+
+</html>
