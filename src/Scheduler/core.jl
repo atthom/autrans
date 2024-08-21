@@ -1,7 +1,7 @@
 
 function can_work(perm, day, worker_off)
     for (i, days_off) in worker_off
-        if day in days_off && perm[i] == 1
+        if day-1 in days_off && perm[i] == 1
             return false
         end
     end
@@ -37,31 +37,49 @@ mse(arr) = @chain arr begin
 end
 
 
+function mse(arr, scheduler::Scheduler)
+    all_mse = 0
+    nb_workers = length(scheduler.workers)
+    for day_idx in 1:scheduler.days
+        worker_working = [w for w in 1:nb_workers if !in(day_idx-1, scheduler.workers[w].days_off)]
+        m1, m2 = extrema(arr[day_idx, worker_working])
+        all_mse += (m2 - m1)^2
+    end
+    return all_mse
+end
+
 function task_per_day_loss(scheduler, schedule, nb_worker)
     # equity between worker in type of task assigned
-    agg_all_tasks_per_day = zeros(Int, (length(scheduler.all_task_indices_per_day), nb_worker))
+    agg_all_tasks_per_day = zeros((length(scheduler.all_task_indices_per_day), nb_worker))
+
+    worker_off = [length(w.days_off) for w in scheduler.workers]
     for (id_t, (t, indices)) in enumerate(scheduler.all_task_indices_per_day)
         agg_all_tasks_per_day[id_t, :] = sum(schedule[indices, :], dims=1)
-    end
-    coeff_task = [length(w.days_off) for w in scheduler.workers]
-    coeff_task = scheduler.days ./ (scheduler.days .- coeff_task)
+        avg_task = t.worker_slots / nb_worker
+        agg_all_tasks_per_day[id_t, :] += (worker_off*avg_task)
 
-    agg_all_tasks_per_day = agg_all_tasks_per_day .* coeff_task'
+    end
+    
+    #coeff_task = [scheduler.days - length(w.days_off) for w in scheduler.workers]
+    #coeff_task = scheduler.days ./ coeff_task
+    
+    #agg_all_tasks_per_day_coeff = agg_all_tasks_per_day .* coeff_task'
     return agg_all_tasks_per_day, mse(agg_all_tasks_per_day)
 end
 
 function type_task_loss(scheduler, agg_all_tasks_per_day, nb_worker)
-    agg_type_task = zeros(Int, (length(scheduler.task_type_indices), nb_worker))
+    agg_type_task = zeros((length(scheduler.task_type_indices), nb_worker))
     for (id_t, indices) in enumerate(scheduler.task_type_indices)
         agg_type_task[id_t, :] = sum(agg_all_tasks_per_day[indices, :], dims=1)
     end
 
     # update agg_tasks (people with less days should work less)
-    coeff_task = [length(w.days_off) for w in scheduler.workers]
-    coeff_task = scheduler.days ./ (scheduler.days .- coeff_task)
+    #coeff_task = [scheduler.days - length(w.days_off) for w in scheduler.workers]
+    #coeff_task = coeff_task ./ scheduler.days
 
-    agg_type_task = agg_type_task .* coeff_task'
-    return mse(agg_type_task)
+    #agg_type_task = agg_type_task .* coeff_task'
+    agg_worker = sum(agg_type_task, dims=1)
+    return mse(agg_type_task) + mse(agg_worker)
 end
 
 function workload_loss(scheduler, schedule, nb_worker)
@@ -70,7 +88,8 @@ function workload_loss(scheduler, schedule, nb_worker)
     for (i, d) in enumerate(scheduler.daily_indices)
         agg_all_days[i, :] = sum(schedule[d, :], dims=1)
     end
-    return mse(agg_all_days)
+
+    return mse(agg_all_days, scheduler)
 end
 
 function shuffle_team_loss(scheduler, schedule, nb_worker)
@@ -85,9 +104,10 @@ function shuffle_team_loss(scheduler, schedule, nb_worker)
         end
     end
 
-    coeff_task = [length(w1.days_off) + length(w2.days_off) for w1 in scheduler.workers for w2 in scheduler.workers]
-    coeff_task = scheduler.days ./ (scheduler.days .- coeff_task)
-    agg_shuffle = agg_shuffle .* coeff_task
+    #coeff_task = [scheduler.days - length(w.days_off) for w in scheduler.workers]
+    #coeff_task = coeff_task ./ scheduler.days
+
+    #agg_shuffle = agg_shuffle .* coeff_task
 
     agg_shuffle = maximum(agg_shuffle) - minimum(agg_shuffle)
 
@@ -116,7 +136,7 @@ function fitness(scheduler, schedule, verbose=false)
     end
 
     #return per_worker_balance +agg_type_loss + agg_type_loss2 + agg_time_loss + agg_time_loss2
-    return agg_type_loss*2 + agg_workload_loss + agg_type_loss2 #+ agg_shuffle_loss
+    return agg_type_loss + agg_workload_loss + agg_type_loss2 #+ agg_shuffle_loss
 end
 
 
@@ -197,7 +217,7 @@ function tabu_search(scheduler; nb_gen = 200, maxTabuSize=50)
         elseif best_fit < fitness(scheduler, best)
             best = bestCandidate
         end
-        
+
         push!(tabu_list, bestCandidate)
 
         if length(tabu_list) > maxTabuSize

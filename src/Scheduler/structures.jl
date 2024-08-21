@@ -34,7 +34,7 @@ function Scheduler(payload::Dict)
     workers = SWorker.(payload["workers"])
     tasks = STask.(payload["tasks"])
 
-    N_first, N_last, days = payload["cutoff_N_first"], payload["cutoff_N_first"], payload["days"]
+    N_first, N_last, days = payload["cutoff_N_first"], payload["cutoff_N_last"], payload["days"]
     task_per_day = [tasks[i] for i in payload["task_per_day"] .+ 1]
     total_task = length(task_per_day)*days - N_first - N_last
     #all_task_indices = Vector{Tuple{STask, Vector{Int}}}()
@@ -62,10 +62,16 @@ function get_task(s::Scheduler, id::Int)
 end
 
 function seed(s::Scheduler)
-    slots = zeros(Bool, (s.total_tasks, length(s.workers)))
-    for t in 1:s.total_tasks
-        task = get_task(s, t)
-        slots[t, rand(1:10, task.worker_slots)] .= 1
+    nb_workers = length(s.workers)
+    slots = zeros(Bool, (s.total_tasks, nb_workers))
+    for (day_idx, indices) in enumerate(s.daily_indices)
+        worker_working = [w for w in 1:nb_workers if !in(day_idx-1, s.workers[w].days_off)]
+        
+        for t in indices
+            task = get_task(s, t)
+            random_affectation = StatsBase.sample(worker_working, task.worker_slots, replace=false)
+            slots[t, random_affectation] .= 1
+        end
     end
     return slots
 end

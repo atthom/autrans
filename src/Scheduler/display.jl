@@ -1,42 +1,40 @@
 
 
-function agg_jobs(s::Scheduler, schedule)
-    tasks_agg = DataFrame(Tasks=[t.name for t in s.task_per_day])
-    nb_jobs = length(s.task_per_day)
-    nb_workers = length(s.workers)
+function agg_jobs(scheduler::Scheduler, schedule)
+    tasks_agg = DataFrame(Tasks=[t.name for t in scheduler.task_per_day])
+    nb_jobs = length(scheduler.task_per_day)
+    nb_workers = length(scheduler.workers)
     for id_worker in 1:nb_workers
         jobs = findall(x -> x==1, schedule[:, id_worker])
-        jobs = (jobs .+ s.cutoff_N_first) .% nb_jobs
+        jobs = (jobs .+ scheduler.cutoff_N_first) .% nb_jobs
         jobs = countmap(jobs)
         jobs = DefaultDict(0, jobs) 
         jobs[nb_jobs] = jobs[0]
-        tasks_agg[!, s.workers[id_worker].name] = [jobs[i] for i in 1:nb_jobs]
+        tasks_agg[!, scheduler.workers[id_worker].name] = [jobs[i] for i in 1:nb_jobs]
     end
     return tasks_agg
 end
 
-function agg_type(s::Scheduler, schedule)
-    df_jobs = agg_jobs(s, schedule)
+function agg_type(scheduler::Scheduler, schedule)
+    df_jobs = agg_jobs(scheduler, schedule)
     grp_df =  groupby(df_jobs, :Tasks)
-    workers = [w.name for w in s.workers] 
+    workers = [w.name for w in scheduler.workers] 
     new_df = combine(grp_df, workers .=> sum)
 
-    col_names = vcat(["Tasks"], [w.name for w in s.workers])
+    col_names = vcat(["Tasks"], [w.name for w in scheduler.workers])
     return rename(new_df, col_names)
 end
 
 
-function agg_time(s::Scheduler, schedule)
-    nb_jobs = length(s.task_per_day)
-    offset = s.cutoff_N_first
+function agg_time(scheduler::Scheduler, schedule)
     all_days = []
 
-    for day in s.daily_indices
+    for day in scheduler.daily_indices
         push!(all_days, sum(schedule[day, :], dims=1))
     end
 
     df = DataFrame(vcat(all_days...), [w.name for w in scheduler.workers])
-    days = DataFrame(Days=["Jour $i" for i in 1:s.days])
+    days = DataFrame(Days=["Jour $i" for i in 1:scheduler.days])
     return hcat(days, df)
 end
 
@@ -57,7 +55,7 @@ function agg_display(scheduler::Scheduler, schedule)
                 daily_task = daily_task[1]
                 w_ids = findall(x -> x==1, schedule[daily_task, :])
                 w_names = [scheduler.workers[i].name for i in w_ids]
-                w_names = join(w_names, " ")
+                w_names = join(w_names, ", ", " et ")
             else
                 w_names = ""
             end
