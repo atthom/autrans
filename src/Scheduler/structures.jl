@@ -26,6 +26,7 @@ struct Scheduler
     all_task_indices_per_day::Vector{Tuple{STask, Vector{Int}}}
     task_type_indices::Vector{Vector{Int}}
     daily_indices::Vector{Vector{Int}}
+    balance_daysoff::Bool
 end
 
 
@@ -33,6 +34,8 @@ end
 function Scheduler(payload::Dict)
     workers = SWorker.(payload["workers"])
     tasks = STask.(payload["tasks"])
+
+    balance_daysoff = payload["balance_daysoff"]
 
     N_first, N_last, days = payload["cutoff_N_first"], payload["cutoff_N_last"], payload["days"]
     task_per_day = [tasks[i] for i in payload["task_per_day"] .+ 1]
@@ -49,7 +52,7 @@ function Scheduler(payload::Dict)
 
     daily = daily_indices(task_per_day, days, N_first, N_last)
     
-    return Scheduler(workers, task_per_day, days, total_task, N_first, N_last, all_task_indices_per_day, task_type, daily)
+    return Scheduler(workers, task_per_day, days, total_task, N_first, N_last, all_task_indices_per_day, task_type, daily, balance_daysoff)
 end
 
 function get_task(s::Scheduler, id::Int)
