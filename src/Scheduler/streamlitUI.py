@@ -5,10 +5,15 @@ import numpy as np
 import requests
 
 
-def set_df(layout, payload):
+    
+
+
+def set_df(layout, payload, cols=[]):
     #payload ={"columns": [["Vaiselle", "Repas", "Vaiselle", "Repas", "Vaiselle"], [1, 1, 1, 2, 1], [1, 2, 1, 2, 1], [1, 2, 1, 1, 1], [1, 2, 1, 2, 2], [1, 2, 1, 2, 1], [1, 2, 2, 2, 1], [1, 2, 2, 2, 1], [1, 2, 1, 2, 1], [1, 1, 1, 2, 1], [1, 2, 2, 1, 1], [1, 1, 1, 2, 1]], "colindex": {"lookup": {"Curt": 10, "Bizard": 12, "Jon": 4, "Mayel": 7, "Fishy": 3, "Alicia": 9, "Poulpy": 5, "Chronos": 2, "Melanight": 11, "Tasks": 1, "LeRat": 6, "Bendo": 8}, "names": ["Tasks", "Chronos", "Fishy", "Jon", "Poulpy", "LeRat", "Mayel", "Bendo", "Alicia", "Curt", "Melanight", "Bizard"]}, "metadata": None, "colmetadata": None, "allnotemetadata": True}
     data = np.array(payload["columns"]).T
     df = pd.DataFrame(data, columns=payload["colindex"]["names"])
+    if cols != []:
+        df.columns = cols
     layout = layout.dataframe(df, use_container_width=True)
 
 st.set_page_config(page_title="Autrans", page_icon="🧊", layout="wide")
@@ -20,59 +25,96 @@ header2.subheader("Automated Planning Tool")
 
 settings, tables = st.columns([4, 8])
 
-with settings.form("settings"):
+weekdays = ["Monday", "Tuesday" , "Wednesday", "Thursday" , "Friday", "Saturday", "Sunday"]
+with settings.container(border=True):
     header = st.columns([6])
-    header[0].header("Paramètres")
+    header[0].title("Schedule Settings")
+    st.divider()
 
-    row1 = st.columns([2, 2, 2])
-    nb_days = row1[0].number_input("Nombre de Jours", value=7)
-    cutoff_first = row1[1].number_input("Del N premières tâches", value=1)
-    cutoff_last = row1[2].number_input("Del N dernières tâches", value=2)
+    settings_row1 = st.columns([2, 2, 2])
+    nb_days = settings_row1[0].number_input("Number of days", value=7)
+    weekday_display = settings_row1[1].toggle("Weekday display", value=False)
+    if weekday_display:
+        start_with = settings_row1[2].selectbox("Start with", placeholder="Monday", options=weekdays)
 
-    row2 = st.columns([3, 3])
-    task_name1 = row2[0].text_input("Tâche 1", value="Vaiselle")
-    nb_worker1 = row2[1].number_input("Combien de personnes", value=2, key="nb_worker_vaiselle")
+    if weekday_display:
+        startday = weekdays.index(start_with)
+        selected_days = [(weekdays[(startday+i)%7], (startday+i) // 7) for i in range(nb_days)]
+        multiple_week = any(i>=1 for w, i in selected_days)
 
-    row22 = st.columns([3, 3])
-    task_name2 = row22[0].text_input("Tâche 2", value="Repas")
-    nb_worker2 = row22[1].number_input("Combien de personnes", value=3, key="nb_worker_repas")
+        if multiple_week:
+            selected_days = [d + f" (w {1+i})" for d, i in selected_days]
+        else:
+            selected_days = [d for d, i in selected_days]
+        
+    else:
+        selected_days = [f"Day {i+1}" for i in range(nb_days)]
 
-    row3 = st.columns([3, 3])
+    st.divider()
 
-    workers = st_tags(
-            label="Qui?",
-            text="add more",
-            value=["Chronos", "Jon", "Beurre", "Poulpy", "LeRat", "Alichat", "Bendo", "Curt", "Fishy", "Melanight", "Bizzard", "Arc", "Zozo"],
-            suggestions=["Chronos", "Jon", "Beurre", "Poulpy", "LeRat", "Alichat", "Bendo", "Curt", "Fishy", "Melanight", "Bizzard", "Arc", "Zozo"],
-            maxtags = 20,
-            key="worker")
-    row3[0] = workers
+    task_row = st.columns([6]) 
+    task_row[0].title("Tasks")
+
+    task_row1 = st.columns([2, 2, 2])
+    number_of_tasks = task_row1[0].number_input("Number of tasks", value=1, key="number_of_tasks", min_value=1, max_value=10)
+    cutoff_first = task_row1[1].number_input("Delete first tasks", value=1, min_value=0)
+    cutoff_last = task_row1[2].number_input("Delete last tasks", value=2, min_value=0)
+
+    all_tasks = []
+    for i in range(number_of_tasks):
+        task_row_i = st.columns([2, 2, 2])
+        task_name_i = task_row_i[0].text_input(f"Task name", value=f"Task {i+1}", key=f"task_name_{i}")
+        nb_worker_i = task_row_i[1].number_input("Number of workers", value=2, key=f"task_workers_{i}")
+        task_difficulty_i = task_row_i[2].number_input("Task difficulty", value=1, key=f"task_difficulty_{i}")
+        all_tasks.append((task_name_i, nb_worker_i, task_difficulty_i))
+
+    task_row4 = st.columns([6])
+    all_task_names, _, _ = zip(*all_tasks)
 
     task_per_day = st_tags(
             label="Ordres des Tâches pour une journée type:",
             text="add more",
-            value=["Vaisselle", "Repas", "Vaisselle", "Repas", "Vaisselle"],
-            suggestions=[""],
+            value=[all_task_names[0], all_task_names[-1], all_task_names[0]],
+            suggestions=all_task_names,
             maxtags = 15,
             key="task_per_day")
-    row3[1] = task_per_day
+    task_row4[0] = task_per_day
+    st.divider()
 
-    row4 = st.columns([6])
-    row4[0].header("Jours travaillés")
-    days_worked = pd.DataFrame(np.array([workers]).T, columns=["Workers"])
-    for d in range(nb_days):
-        days_worked[f"Day {d+1}"] = True
-    edited_worked = row4[0].data_editor(days_worked, use_container_width=True, hide_index=True, key="days_worked")
+    worker_row = st.columns([6])
+    worker_row[0].title("Workers")
+
+    worker_row1 = st.columns([2, 2, 2], vertical_alignment="center")
+    nb_workers = worker_row1[0].number_input("Number of workers", value=7)
+    with_days_off = worker_row1[1].toggle("Add holidays", value=False)
+    balance_daysoff = worker_row1[2].toggle("Rebalance holidays", value=False)
+
+    all_workers = []
+    for i in range(nb_workers):
+        worker_row1 = st.columns([2, 4])
+        worker_name = worker_row1[0].text_input(f"Worker name", value=f"Worker {i+1}", key=f"worker_name_{i}")
+
+        if with_days_off:
+            worker_days_off = worker_row1[1].multiselect("Holidays", options=selected_days, default=[], key=f"worker_days_off_{i}")
+        else:
+            worker_days_off = []
+
+        all_workers.append((worker_name, worker_days_off))
+    
+    workers, _ = zip(*all_workers)
+    workers = list(workers)
+
+    st.divider()
 
     row5 = st.columns([2, 2, 2])
-    submit = row5[1].form_submit_button("Submit")
+    submit = row5[1].button("Submit", type="primary")
 
  
 with tables:
     row1 = st.columns([10])
     row1[0].header("Planning")
     row2 = st.columns([10])
-    schedule_display = row2[0].dataframe(pd.DataFrame(columns=["Tasks"] + [f"Day {i+1}" for i in range(nb_days)]),
+    schedule_display = row2[0].dataframe(pd.DataFrame(columns=["Tasks"] + selected_days),
                                          hide_index=True, use_container_width=True)
 
     row5 = st.columns([10])
@@ -91,24 +133,18 @@ with tables:
     task_per_day_agg = row8[0].dataframe(pd.DataFrame(columns=["Tasks"] + workers),  hide_index=True, use_container_width=True)
 
 
-
-
-
 if submit:
-    payload_workers = []
-    for worker in edited_worked.values:
-        w = worker[0]
-        days_off = [idx for idx, day in enumerate(worker[1:]) if day == False]
-        payload_workers.append((w, days_off))
     
     payload = {
-        "workers": payload_workers,
-        "tasks": [(task_name1, nb_worker1, 1), (task_name2, nb_worker2, 1)],
+        "workers": all_workers,
+        "tasks": all_tasks,
         "nb_days": nb_days,
         "task_per_day": task_per_day,
         "cutoff_first": cutoff_first,
-        "cutoff_last": cutoff_last
+        "cutoff_last": cutoff_last,
+        "balance_daysoff": balance_daysoff
     }
+    print(payload)
 
     res = requests.post("http://localhost:8080/schedule", json=payload)
     all_agg = res.json()
@@ -119,5 +155,8 @@ if submit:
     print(all_agg["jobs"])
 
     for layout, agg in zip([schedule_display, time_agg, task_agg, task_per_day_agg], ["display", "type", "time", "jobs"]):
-        set_df(layout, all_agg[agg])
+        if agg == "display":
+            set_df(layout, all_agg[agg], ["Tasks"] + selected_days)
+        else:
+            set_df(layout, all_agg[agg])
 

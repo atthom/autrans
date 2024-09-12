@@ -1,4 +1,3 @@
-
 using DataFrames
 using Metaheuristics
 using Chain
@@ -26,7 +25,8 @@ function test_new_format2()
         "task_per_day"=> [0, 1, 0, 1, 0],
         "days" => 7, 
         "cutoff_N_first" => 3,
-        "cutoff_N_last" => 0
+        "cutoff_N_last" => 0,
+        "balance_daysoff" => true
     )
     # arc, zozo => jeudi arrive
     # curt => vendredi arrive
@@ -56,6 +56,7 @@ struct SchedulePayload
     nb_days::Int
     cutoff_first::Int
     cutoff_last::Int
+    balance_daysoff::Bool
 end
 
 
@@ -70,7 +71,8 @@ end
         "task_per_day" => [task_id[t] for t in schedule_payload.task_per_day], 
         "days" => schedule_payload.nb_days, 
         "cutoff_N_first"=> schedule_payload.cutoff_first,
-        "cutoff_N_last"=> schedule_payload.cutoff_last
+        "cutoff_N_last" => schedule_payload.cutoff_last,
+        "balance_daysoff" => schedule_payload.balance_daysoff
     )
 
     @show payload
