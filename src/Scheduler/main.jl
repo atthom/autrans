@@ -1,5 +1,4 @@
 
-using Stipple, StippleUI
 using DataFrames
 using Metaheuristics
 using Chain

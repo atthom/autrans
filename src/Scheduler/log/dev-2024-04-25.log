@@ -1,0 +1,98 @@
+┌ Info: 2024-04-25 09:44:40 Watching ["/Users/I741893/Projets/Others/autrans/src/Scheduler"]
+└ @ GenieAutoReload /Users/I741893/.julia/packages/GenieAutoReload/ESvsh/src/GenieAutoReload.jl:19
+┌ Info: 2024-04-25 09:45:03 
+│ Web Server starting at http://127.0.0.1:8000 
+└ @ Genie.Server /Users/I741893/.julia/packages/Genie/uSsQa/src/Server.jl:182
+┌ Warning: 2024-04-25 09:45:25 Trouble doing things:
+│ BoundsError: attempt to access 3-element Vector{Main.SchedulerApp.Worker} at index [4]
+│ 42-element Vector{Base.StackTraces.StackFrame}:
+│  getindex at essentials.jl:13 [inlined]
+│  #20 at displays.jl:56 [inlined]
+│  iterate at generator.jl:47 [inlined]
+│  collect_to! at array.jl:892 [inlined]
+│  collect_to_with_first! at array.jl:870 [inlined]
+│  _collect(c::Vector{Tuple{Int64, Int64}}, itr::Base.Generator{Vector{Tuple{Int64, Int64}}, Main.SchedulerApp.var"#20#25"{Main.SchedulerApp.Scheduler}}, ::Base.EltypeUnknown, isz::Base.HasShape{1}) at array.jl:864
+│  collect_similar at array.jl:763 [inlined]
+│  map at abstractarray.jl:3285 [inlined]
+│  agg_workers(s::Main.SchedulerApp.Scheduler, schedule::Matrix{Bool}) at displays.jl:56
+│  #105 at app.jl:39 [inlined]
+│  (::Main.SchedulerApp.var"#105#108"{Main.SchedulerApp.var"##Main.SchedulerApp_ReactiveModel!#408"})() at ReactiveTools.jl:0
+│  (::Stipple.var"#94#96"{Bool, Main.SchedulerApp.var"#105#108"{Main.SchedulerApp.var"##Main.SchedulerApp_ReactiveModel!#408"}, Reactive{Bool}})(pressed::Bool) at Stipple.jl:833
+│  #invokelatest#2 at essentials.jl:892 [inlined]
+│  invokelatest at essentials.jl:889 [inlined]
+│  callwatchers(field::Reactive{Bool}, val::Bool, keys::Int64; notify::Stipple.var"#32#34") at mutators.jl:34
+│  callwatchers at mutators.jl:18 [inlined]
+│  #setindex_withoutwatchers!#31 at mutators.jl:13 [inlined]
+│  setindex_withoutwatchers!(field::Reactive{Bool}, val::Bool, keys::Int64) at mutators.jl:10
+│  update!(model::Main.SchedulerApp.var"##Main.SchedulerApp_ReactiveModel!#408", field::Symbol, newval::Bool, oldval::Bool) at mutators.jl:124
+│  (::Stipple.var"#50#53"{String, Module, String, Main.SchedulerApp.var"##Main.SchedulerApp_ReactiveModel!#408", DataType})() at Stipple.jl:497
+│  match_channels(req::HTTP.Messages.Request, msg::String, ws_client::HTTP.WebSockets.WebSocket, params::Genie.Router.Params{Any}) at Router.jl:625
+│  route_ws_request(req::HTTP.Messages.Request, msg::String, ws_client::HTTP.WebSockets.WebSocket) at Router.jl:226
+│  #handle_ws_request#31 at Server.jl:412 [inlined]
+│  kwcall(::@NamedTuple{message::String, client::HTTP.WebSockets.WebSocket}, ::typeof(Genie.Server.handle_ws_request), req::HTTP.Messages.Request) at Server.jl:410
+│  (::Genie.Server.var"#29#30"{HTTP.WebSockets.WebSocket})() at macros.jl:123
+│  #invokelatest#2 at essentials.jl:892 [inlined]
+│  invokelatest at essentials.jl:889 [inlined]
+│  #153 at remotecall.jl:425 [inlined]
+│  run_work_thunk(thunk::Distributed.var"#153#154"{Genie.Server.var"#29#30"{HTTP.WebSockets.WebSocket}, Tuple{}, Base.Pairs{Symbol, Union{}, Tuple{}, @NamedTuple{}}}, print_error::Bool) at process_messages.jl:70
+│  #remotecall_fetch#158 at remotecall.jl:450 [inlined]
+│  remotecall_fetch at remotecall.jl:449 [inlined]
+│  #remotecall_fetch#162 at remotecall.jl:492 [inlined]
+│  remotecall_fetch at remotecall.jl:492 [inlined]
+│  setup_ws_handler(stream::HTTP.Streams.Stream{HTTP.Messages.Request, HTTP.Connections.Connection{Sockets.TCPSocket}}, ws_client::HTTP.WebSockets.WebSocket) at Server.jl:379
+│  #7 at Server.jl:121 [inlined]
+│  upgrade(f::Genie.Server.var"#7#13"{HTTP.Streams.Stream{HTTP.Messages.Request, HTTP.Connections.Connection{Sockets.TCPSocket}}}, http::HTTP.Streams.Stream{HTTP.Messages.Request, HTTP.Connections.Connection{Sockets.TCPSocket}}; suppress_close_error::Bool, maxframesize::Int64, maxfragmentation::Int64, kw::Base.Pairs{Symbol, Union{}, Tuple{}, @NamedTuple{}}) at WebSockets.jl:440
+│  upgrade at WebSockets.jl:420 [inlined]
+│  (::Genie.Server.var"#6#12")(stream::HTTP.Streams.Stream{HTTP.Messages.Request, HTTP.Connections.Connection{Sockets.TCPSocket}}) at Server.jl:120
+│  #invokelatest#2 at essentials.jl:892 [inlined]
+│  invokelatest at essentials.jl:889 [inlined]
+│  handle_connection(f::Function, c::HTTP.Connections.Connection{Sockets.TCPSocket}, listener::HTTP.Servers.Listener{Nothing, Sockets.TCPServer}, readtimeout::Int64, access_log::Nothing) at Servers.jl:469
+│  (::HTTP.Servers.var"#16#17"{Genie.Server.var"#6#12", HTTP.Servers.Listener{Nothing, Sockets.TCPServer}, Set{HTTP.Connections.Connection}, Int64, Nothing, ReentrantLock, Base.Semaphore, HTTP.Connections.Connection{Sockets.TCPSocket}})() at Servers.jl:401
+└ @ Main.SchedulerApp /Users/I741893/Projets/Others/autrans/src/Scheduler/app.jl:48
+┌ Info: 2024-04-25 09:46:50 Watching ["/Users/I741893/Projets/Others/autrans/src/Scheduler"]
+└ @ GenieAutoReload /Users/I741893/.julia/packages/GenieAutoReload/ESvsh/src/GenieAutoReload.jl:19
+┌ Info: 2024-04-25 09:46:51 Watching ["/Users/I741893/Projets/Others/autrans/src/Scheduler"]
+└ @ GenieAutoReload /Users/I741893/.julia/packages/GenieAutoReload/ESvsh/src/GenieAutoReload.jl:19
+┌ Info: 2024-04-25 09:46:52 
+│ Web Server starting at http://127.0.0.1:8000 
+└ @ Genie.Server /Users/I741893/.julia/packages/Genie/uSsQa/src/Server.jl:182
+┌ Info: 2024-04-25 09:46:52 Listening on: 127.0.0.1:8000, thread id: 1
+└ @ HTTP.Servers /Users/I741893/.julia/packages/HTTP/vnQzp/src/Servers.jl:382
+┌ Info: 2024-04-25 09:48:54 Autoreloading
+└ @ GenieAutoReload /Users/I741893/.julia/packages/GenieAutoReload/ESvsh/src/GenieAutoReload.jl:22
+┌ Info: 2024-04-25 09:49:03 Watching ["/Users/I741893/Projets/Others/autrans/src/Scheduler"]
+└ @ GenieAutoReload /Users/I741893/.julia/packages/GenieAutoReload/ESvsh/src/GenieAutoReload.jl:19
+┌ Info: 2024-04-25 09:49:03 Autoreloading
+└ @ GenieAutoReload /Users/I741893/.julia/packages/GenieAutoReload/ESvsh/src/GenieAutoReload.jl:22
+┌ Info: 2024-04-25 09:49:17 Autoreloading
+└ @ GenieAutoReload /Users/I741893/.julia/packages/GenieAutoReload/ESvsh/src/GenieAutoReload.jl:22
+┌ Info: 2024-04-25 09:49:21 Autoreloading
+└ @ GenieAutoReload /Users/I741893/.julia/packages/GenieAutoReload/ESvsh/src/GenieAutoReload.jl:22
+┌ Info: 2024-04-25 09:49:29 Autoreloading
+└ @ GenieAutoReload /Users/I741893/.julia/packages/GenieAutoReload/ESvsh/src/GenieAutoReload.jl:22
+┌ Info: 2024-04-25 09:49:31 Autoreloading
+└ @ GenieAutoReload /Users/I741893/.julia/packages/GenieAutoReload/ESvsh/src/GenieAutoReload.jl:22
+┌ Info: 2024-04-25 09:49:45 Autoreloading
+└ @ GenieAutoReload /Users/I741893/.julia/packages/GenieAutoReload/ESvsh/src/GenieAutoReload.jl:22
+┌ Warning: 2024-04-25 09:49:46 MethodError(Main.SchedulerApp.var"#127#129"{Main.SchedulerApp.var"##Main.SchedulerApp_ReactiveModel!#371"}(Main.SchedulerApp.var"##Main.SchedulerApp_ReactiveModel!#371"("LICRNIWDEEXWDELYQLTCKHRERVNTUSLU", LittleDict{Symbol, Int64, Vector{Symbol}, Vector{Int64}}(), Reactive{Bool}(Observable(true), 1, false, false, ""), Reactive{Bool}(Observable(false), 1, false, false, ""), Reactive{Reactive{DataTable}}(Observable(Reactive{DataTable}(Observable{DataTable}(DataTable{DataFrame}(5×8 DataFrame
+│  Row │ Tache     Jour 1           Jour 2           Jour 3           Jour 4           Jour 5           Jour 6           Jour 7
+│      │ String    String           String           String           String           String           String           String
+│ ─────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+│    1 │ Vaiselle  Cookie, Chronos  Cookie, Chronos  Cookie, Chronos  Fish, Chronos    Cookie, Chronos  Fish, Chronos    Cookie, Chronos
+│    2 │ Repas     Cookie, Chronos  Cookie, Chronos  Fish, Chronos    Cookie, Chronos  Cookie, Chronos  Cookie, Chronos  Fish, Chronos
+│    3 │ Vaiselle  Fish, Chronos    Cookie, Fish     Fish, Chronos    Cookie, Fish     Fish, Chronos    Fish, Chronos    Cookie, Chronos
+│    4 │ Repas     Cookie, Fish     Fish, Chronos    Cookie, Fish     Fish, Chronos    Cookie, Fish     Cookie, Fish     Cookie, Fish
+│    5 │ Vaiselle  Fish, Chronos    Cookie, Fish     Cookie, Chronos  Cookie, Fish     Cookie, Fish     Cookie, Fish     Cookie, Fish, DataTableOptions(false, "ID", nothing, Dict{Union{Regex, String}, Dict{Symbol, Any}}()))), 1, false, false, "")), 4, false, false, "/Users/I741893/Projets/Others/autrans/src/Scheduler/app.jl:18"), Reactive{Reactive{DataTablePagination}}(Observable(Reactive{DataTablePagination}(Observable(DataTablePagination(:desc, false, 1, 50)), 1, false, false, "")), 4, false, false, "/Users/I741893/Projets/Others/autrans/src/Scheduler/app.jl:19"), Reactive{Reactive{Int64}}(Observable(Reactive{Int64}(Observable(7), 1, false, false, "")), 1, false, false, "/Users/I741893/Projets/Others/autrans/src/Scheduler/app.jl:20"), Reactive{Reactive{Int64}}(Observable(Reactive{Int64}(Observable(5), 1, false, false, "")), 1, false, false, "/Users/I741893/Projets/Others/autrans/src/Scheduler/app.jl:21"), Reactive{Reactive{Int64}}(Observable(Reactive{Int64}(Observable(2), 1, false, false, "")), 1, false, false, "/Users/I741893/Projets/Others/autrans/src/Scheduler/app.jl:22"), Reactive{Reactive{Int64}}(Observable(Reactive{Int64}(Observable(0), 1, false, false, "")), 1, false, false, "/Users/I741893/Projets/Others/autrans/src/Scheduler/app.jl:23"), Reactive{Reactive{Int64}}(Observable(Reactive{Int64}(Observable(0), 1, false, false, "")), 1, false, false, "/Users/I741893/Projets/Others/autrans/src/Scheduler/app.jl:24"), Reactive{Reactive{Vector{String}}}(Observable(Reactive{Vector{String}}(Observable(["Cookie", "Fish", "Chronos"]), 1, false, false, "")), 1, false, false, "/Users/I741893/Projets/Others/autrans/src/Scheduler/app.jl:25"), Reactive{Reactive{Vector{String}}}(Observable(Reactive{Vector{String}}(Observable(String[]), 1, false, false, "")), 1, false, false, "/Users/I741893/Projets/Others/autrans/src/Scheduler/app.jl:27"), Reactive{Bool}(Observable(true), 1, false, false, "/Users/I741893/Projets/Others/autrans/src/Scheduler/app.jl:28"))), (), 0x0000000000007c89)
+└ @ Stipple /Users/I741893/.julia/packages/Stipple/egpvt/src/Stipple.jl:835
+┌ Info: 2024-04-25 09:51:58 Autoreloading
+└ @ GenieAutoReload /Users/I741893/.julia/packages/GenieAutoReload/ESvsh/src/GenieAutoReload.jl:22
+┌ Info: 2024-04-25 09:53:03 Autoreloading
+└ @ GenieAutoReload /Users/I741893/.julia/packages/GenieAutoReload/ESvsh/src/GenieAutoReload.jl:22
+┌ Info: 2024-04-25 09:53:13 Autoreloading
+└ @ GenieAutoReload /Users/I741893/.julia/packages/GenieAutoReload/ESvsh/src/GenieAutoReload.jl:22
+┌ Info: 2024-04-25 10:30:06 Autoreloading
+└ @ GenieAutoReload /Users/I741893/.julia/packages/GenieAutoReload/ESvsh/src/GenieAutoReload.jl:22
+┌ Info: 2024-04-25 10:34:10 Autoreloading
+└ @ GenieAutoReload /Users/I741893/.julia/packages/GenieAutoReload/ESvsh/src/GenieAutoReload.jl:22
+┌ Info: 2024-04-25 10:34:22 Autoreloading
+└ @ GenieAutoReload /Users/I741893/.julia/packages/GenieAutoReload/ESvsh/src/GenieAutoReload.jl:22
