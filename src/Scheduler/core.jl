@@ -55,7 +55,7 @@ function task_per_day_loss(scheduler, schedule, nb_worker)
     # equity between worker in type of task assigned
     agg_all_tasks_per_day = zeros(Int, (length(scheduler.all_task_indices_per_day), nb_worker))
 
-    worker_off = [length(w.days_off) for w in scheduler.workers]
+    #worker_off = [length(w.days_off) for w in scheduler.workers]
     for (id_t, (t, indices)) in enumerate(scheduler.all_task_indices_per_day)
         agg_all_tasks_per_day[id_t, :] = sum(schedule[indices, :], dims=1)
         #avg_task = t.worker_slots / nb_worker
@@ -92,7 +92,7 @@ function workload_loss(scheduler, schedule, nb_workers)
         agg_all_days[i, :] = sum(schedule[d, :], dims=1)
     end
 
-    return mse(agg_all_days)
+    return mse(agg_all_days, scheduler)
 end
 
 function shuffle_team_loss(scheduler, schedule, nb_worker)
@@ -172,9 +172,6 @@ function genetic_search(scheduler; pop_size=50, nb_gen = 2000)
 end
 
 
-
-
-
 function simple_search(scheduler; nb_gen = 5000)
     best = seed(scheduler)
     
@@ -233,24 +230,43 @@ end
 
 
 function permutations_seed(scheduler)
+
+    to_balance = true
+
+    nb_slots = sum([t.worker_slots*length(indices) for (t, indices) in scheduler.all_task_indices_per_day])
+    avg_work = nb_slots / length(scheduler.workers) / scheduler.days
+    rebalance = [avg_work*length(w.days_off) for w in scheduler.workers]
+    rebalance = reshape(rebalance, 1, length(rebalance))
+
     nb_workers = length(scheduler.workers)
     slots = zeros(Bool, (scheduler.total_tasks, nb_workers))
+
     for (day_idx, indices) in enumerate(scheduler.daily_indices)
-        
         for t in indices
             task = get_task(scheduler, t)
-
-            workload = sum(slots, dims=1)
-            all_min = findall(workload .== minimum(workload))
-            if length(all_min) < task.worker_slots
-                all_min2 = findall(workload .== minimum(workload)+1)
-                random_affectation = StatsBase.sample(all_min2, task.worker_slots - length(all_min), replace=false)
-                random_affectation = vcat(all_min, random_affectation)
-            else
-                random_affectation = StatsBase.sample(all_min, task.worker_slots, replace=false)
-            end
             
-            random_affectation = [i[2] for i in random_affectation]
+            workload = sum(slots, dims=1) 
+            if to_balance
+                workload += rebalance
+            end
+            workload = [(i, w) for (i, w) in enumerate(workload) if !in(day_idx-1, scheduler.workers[i].days_off)]
+
+            wv = getindex.(workload, 2)
+            min_work, max_work = extrema(wv)
+            
+            if max_work == min_work
+                wv = ones(Int, length(workload))
+            else
+                wv = max_work .- wv
+                if length(findall(x-> x != 0, wv)) < task.worker_slots
+                    wv = wv .+ 1
+                end
+            end
+
+            wv = wv .^ 2
+            
+            random_affectation = StatsBase.sample(workload, Weights(wv), task.worker_slots, replace=false)
+            random_affectation = getindex.(random_affectation, 1)
 
             slots[t, random_affectation] .= 1
         end
@@ -303,6 +319,12 @@ function optimize_task_per_day(scheduler, best, nb_workers)
         next_type_task_indices = scheduler.all_task_indices_per_day[idx_type_task_min][2]
 
         task_to_giveback = argmax(best[next_type_task_indices, worker_min])
+
+        days_off = vcat(scheduler.workers[worker_max].days_off, scheduler.workers[worker_min].days_off)
+        tasks_off = [t for i in days_off for t in scheduler.daily_indices[i+1]]
+        if task_to_give in tasks_off || task_to_giveback in tasks_off
+            continue
+        end
         
         best = sequence_swap(best, worker_max, worker_min, task_index[task_to_give], next_type_task_indices[task_to_giveback])
 
@@ -344,7 +366,14 @@ function square_trick(scheduler, best)
             else
                 t1, t2 = possible_task[possible_task_idx]
             end
-            
+
+
+            days_off = vcat(scheduler.workers[worker_max].days_off, scheduler.workers[worker_min].days_off)
+            tasks_off = [t for i in days_off for t in scheduler.daily_indices[i+1]]
+            if t1 in tasks_off || t2 in tasks_off
+                continue
+            end
+
             best = sequence_swap(best, worker_max, worker_min, t1, t2)
         end
     end
@@ -403,7 +432,7 @@ function optimize_workload(scheduler, all_schedules, best, nb_workers)
     end
 end
 
-function optimize_permutations(scheduler, nb_gen=10)
+function optimize_permutations(scheduler; nb_gen=10)
     all_res = []
 
     for i in 1:nb_gen
@@ -427,5 +456,20 @@ function optimize_permutations(scheduler, nb_gen=10)
     
     best = all_res[argmin(fitness.(Ref(scheduler), all_res))]
     println("best fitness: $(fitness(scheduler, best, true))")
+
+    #check_days_off(scheduler, best)
+
     return best
+end
+
+
+function check_days_off(scheduler, s)
+
+    for (w_id, w) in enumerate(scheduler.workers)
+        task_off = [t for i in w.days_off for t in scheduler.daily_indices[i+1]]
+        if any(s[task_off, w_id])
+            println("worker $w_id is working on his day off")
+        end
+    end
+    
 end

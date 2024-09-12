@@ -34,9 +34,11 @@ function test_new_format2()
     # fishy dimanche matin
     scheduler = Scheduler(payload)
  
-    schedule = tabu_search(scheduler, nb_gen = 500, maxTabuSize=200)
-    schedule = genetic_search(scheduler, pop_size=50, nb_gen = 2000)
-    schedule = simple_search(scheduler, nb_gen = 2000)
+    #schedule = tabu_search(scheduler, nb_gen = 500, maxTabuSize=200)
+    #schedule = genetic_search(scheduler, pop_size=50, nb_gen = 2000)
+    #schedule = simple_search(scheduler, nb_gen = 2000)
+    schedule = optimize_permutations(scheduler, nb_gen = 10)
+
     println(agg_jobs(scheduler, schedule))
     println(agg_type(scheduler, schedule))
     println(agg_time(scheduler, schedule))
