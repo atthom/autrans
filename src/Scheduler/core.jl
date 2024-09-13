@@ -231,8 +231,6 @@ end
 
 function permutations_seed(scheduler)
 
-    to_balance = true
-
     nb_slots = sum([t.worker_slots*length(indices) for (t, indices) in scheduler.all_task_indices_per_day])
     avg_work = nb_slots / length(scheduler.workers) / scheduler.days
     rebalance = [avg_work*length(w.days_off) for w in scheduler.workers]
@@ -246,7 +244,7 @@ function permutations_seed(scheduler)
             task = get_task(scheduler, t)
             
             workload = sum(slots, dims=1) 
-            if to_balance
+            if scheduler.balance_daysoff
                 workload += rebalance
             end
             workload = [(i, w) for (i, w) in enumerate(workload) if !in(day_idx-1, scheduler.workers[i].days_off)]
