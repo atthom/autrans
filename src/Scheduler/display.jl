@@ -3,8 +3,8 @@
 function agg_jobs(scheduler::Scheduler, schedule)
     tasks_agg = DataFrame(Tasks=[t.name for t in scheduler.task_per_day])
     nb_jobs = length(scheduler.task_per_day)
-    nb_workers = length(scheduler.workers)
-    for id_worker in 1:nb_workers
+    
+    for id_worker in 1:length(scheduler.workers)
         jobs = findall(x -> x==1, schedule[:, id_worker])
         jobs = (jobs .+ scheduler.cutoff_N_first) .% nb_jobs
         jobs = countmap(jobs)
@@ -12,6 +12,8 @@ function agg_jobs(scheduler::Scheduler, schedule)
         jobs[nb_jobs] = jobs[0]
         tasks_agg[!, scheduler.workers[id_worker].name] = [jobs[i] for i in 1:nb_jobs]
     end
+
+    push!(tasks_agg, vcat("Total", sum(schedule, dims=1)...))
     return tasks_agg
 end
 
@@ -22,7 +24,9 @@ function agg_type(scheduler::Scheduler, schedule)
     new_df = combine(grp_df, workers .=> sum)
 
     col_names = vcat(["Tasks"], [w.name for w in scheduler.workers])
-    return rename(new_df, col_names)
+    new_df = rename(new_df, col_names)
+    push!(new_df, vcat("Total", sum(schedule, dims=1)...))
+    return new_df
 end
 
 
@@ -35,7 +39,9 @@ function agg_time(scheduler::Scheduler, schedule)
 
     df = DataFrame(vcat(all_days...), [w.name for w in scheduler.workers])
     days = DataFrame(Days=["Jour $i" for i in 1:scheduler.days])
-    return hcat(days, df)
+    agg_all_days = hcat(days, df)
+    push!(agg_all_days, vcat("Total", sum(schedule, dims=1)...))
+    return agg_all_days
 end
 
 

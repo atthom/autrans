@@ -230,7 +230,6 @@ end
 
 
 function permutations_seed(scheduler)
-
     nb_slots = sum([t.worker_slots*length(indices) for (t, indices) in scheduler.all_task_indices_per_day])
     avg_work = nb_slots / length(scheduler.workers) / scheduler.days
     rebalance = [avg_work*length(w.days_off) for w in scheduler.workers]
@@ -280,11 +279,9 @@ function sequence_swap(best, worker_max, worker_min, task_give, task_take)
     affectation_takeback = CartesianIndex(task_take, worker_max)
 
     if best[affectation_take] || best[affectation_takeback] == 1
-        #println("here")
         return best
     end
     if best[affectation_give] && best[affectation_giveback] == 0
-        #println("there")
         return best
     end
 
@@ -454,8 +451,6 @@ function optimize_permutations(scheduler; nb_gen=10)
     
     best = all_res[argmin(fitness.(Ref(scheduler), all_res))]
     println("best fitness: $(fitness(scheduler, best, true))")
-
-    #check_days_off(scheduler, best)
 
     return best
 end

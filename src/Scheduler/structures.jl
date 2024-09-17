@@ -29,8 +29,6 @@ struct Scheduler
     balance_daysoff::Bool
 end
 
-
-
 function Scheduler(payload::Dict)
     workers = SWorker.(payload["workers"])
     tasks = STask.(payload["tasks"])
@@ -53,6 +51,30 @@ function Scheduler(payload::Dict)
     daily = daily_indices(task_per_day, days, N_first, N_last)
     
     return Scheduler(workers, task_per_day, days, total_task, N_first, N_last, all_task_indices_per_day, task_type, daily, balance_daysoff)
+end
+
+
+function check_satisfability(scheduler::Scheduler; cutoff_workers=30, cutoff_tasks=20, cutoff_days=40)
+    if length(scheduler.workers) > cutoff_workers
+        return false, "Too many workers ($cutoff_workersm max)"
+    elseif length(scheduler.task_per_day) > cutoff_tasks
+        return false, "Too many tasks ($cutoff_tasks max)"
+    elseif scheduler.days > cutoff_days
+        return false, "Too many days ($cutoff_days max)"
+    end
+
+    for (idx_day, indices) in enumerate(scheduler.daily_indices)
+        required_workers = [get_task(scheduler, i) for i in indices]
+        daily_worker = length([w for w in scheduler.workers if !in(idx_day-1, w.days_off)])
+
+        for t in required_workers
+            if t.worker_slots > daily_worker
+                return false, "Not enough worker for task $(t.name) on day $idx_day"
+            end
+        end
+    end
+
+    return true, "OK"
 end
 
 function get_task(s::Scheduler, id::Int)

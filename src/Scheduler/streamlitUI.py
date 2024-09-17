@@ -5,11 +5,15 @@ import numpy as np
 import requests
 
 
-    
 
+
+@st.dialog("Schedule is not possible")
+def sat_schedule(txt):
+    st.markdown(f"<h3 style='text-align: center'>{txt}</h3>", unsafe_allow_html=True)
+    if st.button("OK"):
+        st.rerun()
 
 def set_df(layout, payload, cols=[]):
-    #payload ={"columns": [["Vaiselle", "Repas", "Vaiselle", "Repas", "Vaiselle"], [1, 1, 1, 2, 1], [1, 2, 1, 2, 1], [1, 2, 1, 1, 1], [1, 2, 1, 2, 2], [1, 2, 1, 2, 1], [1, 2, 2, 2, 1], [1, 2, 2, 2, 1], [1, 2, 1, 2, 1], [1, 1, 1, 2, 1], [1, 2, 2, 1, 1], [1, 1, 1, 2, 1]], "colindex": {"lookup": {"Curt": 10, "Bizard": 12, "Jon": 4, "Mayel": 7, "Fishy": 3, "Alicia": 9, "Poulpy": 5, "Chronos": 2, "Melanight": 11, "Tasks": 1, "LeRat": 6, "Bendo": 8}, "names": ["Tasks", "Chronos", "Fishy", "Jon", "Poulpy", "LeRat", "Mayel", "Bendo", "Alicia", "Curt", "Melanight", "Bizard"]}, "metadata": None, "colmetadata": None, "allnotemetadata": True}
     data = np.array(payload["columns"]).T
     df = pd.DataFrame(data, columns=payload["colindex"]["names"])
     if cols != []:
@@ -19,16 +23,38 @@ def set_df(layout, payload, cols=[]):
 st.set_page_config(page_title="Autrans", page_icon="🧊", layout="wide")
 
 
-header1, header2, header3 = st.columns([4, 4, 4])
-header2.title("Autrans")
-header2.subheader("Automated Scheduling Tool")
+st.markdown("""
+    <style>
+        .reportview-container {
+            margin-top: -2em;
+        }
+        #MainMenu {visibility: hidden;}
+        .stDeployButton {display:none;}
+        footer {visibility: hidden;}
+        #stDecoration {display:none;}
+    </style>
+""", unsafe_allow_html=True)
+
+#header1, header2, header3 = st.columns([4, 4, 4])
+#header2.title("Autrans")
+#header2.subheader("Automated Scheduling Tool")
+st.markdown("<h1 style='text-align: center;'>Autrans</h1>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center;'>Automated Scheduling Tool</h2>", unsafe_allow_html=True)
+
+#st.write("# Autrans")
+#st.markdown('#')
+
+st.markdown("")
+st.markdown("")
+st.markdown("")
+
 
 settings, tables = st.columns([4, 8])
 
 weekdays = ["Monday", "Tuesday" , "Wednesday", "Thursday" , "Friday", "Saturday", "Sunday"]
 with settings.container(border=True):
     header = st.columns([6])
-    header[0].title("Schedule Settings")
+    header[0].header("Settings")
     st.divider()
 
     settings_row1 = st.columns([2, 3, 3])
@@ -37,8 +63,6 @@ with settings.container(border=True):
     if weekday_display:
         start_with = settings_row1[2].selectbox("Start with", placeholder="Monday", 
                                                 options=weekdays, help="Start planning with a specific day")
-
-    if weekday_display:
         startday = weekdays.index(start_with)
         selected_days = [(weekdays[(startday+i)%7], (startday+i) // 7) for i in range(nb_days)]
         multiple_week = any(i>=1 for w, i in selected_days)
@@ -54,10 +78,10 @@ with settings.container(border=True):
     st.divider()
 
     task_row = st.columns([6]) 
-    task_row[0].title("Tasks")
+    task_row[0].header("Tasks")
 
     task_row1 = st.columns([2, 2, 2])
-    number_of_tasks = task_row1[0].number_input("Number of tasks", value=1, key="number_of_tasks", min_value=1, max_value=10,
+    number_of_tasks = task_row1[0].number_input("Number of tasks", value=3, key="number_of_tasks", min_value=1, max_value=10,
                                                 help="Number of different type of task in the Schedule")
     cutoff_first = task_row1[1].number_input("Delete firsts tasks", value=1, min_value=0,
                                              help="Remove the firsts tasks at the beginning of the Schedule")
@@ -70,39 +94,44 @@ with settings.container(border=True):
         task_row_i = st.columns([3, 3])
         task_name_i = task_row_i[0].text_input(f"Task name", value=f"Task {i+1}", key=f"task_name_{i}",
                                                help="Name of the task")
-        nb_worker_i = task_row_i[1].number_input("Number of workers", value=2, key=f"task_workers_{i}",
+        nb_worker_i = task_row_i[1].number_input("People required", value=2, key=f"task_workers_{i}",
                                                help="Number of people needed to complete the task")
         #task_difficulty_i = task_row_i[2].number_input("Task difficulty", value=1, key=f"task_difficulty_{i}")
         all_tasks.append((task_name_i, nb_worker_i, 1))
 
-    task_row4 = st.columns([6])
-    all_task_names, _, _ = zip(*all_tasks)
+    #task_row4 = st.columns([6])
+    task_per_day, _, _ = zip(*all_tasks)
 
-    task_per_day = st_tags(
-            label="Order of the tasks in a typical day:",
-            text="add more",
-            value=[all_task_names[0], all_task_names[-1], all_task_names[0]],
-            suggestions=all_task_names,
-            maxtags = 15,
-            key="task_per_day")
-    task_row4[0] = task_per_day
+    #task_per_day = st_tags(
+    #        label="Order of the tasks in a typical day:",
+    #        text="add more",
+    #        value=[all_task_names[0], all_task_names[-1], all_task_names[0]],
+    #        suggestions=all_task_names,
+    #        maxtags = 15,
+    #        key="task_per_day")
+    #task_row4[0] = task_per_day
+
     st.divider()
 
     worker_row = st.columns([6])
-    worker_row[0].title("Workers")
+    worker_row[0].header("Workers")
 
     worker_row1 = st.columns([2, 2, 2], vertical_alignment="center")
-    nb_workers = worker_row1[0].number_input("Number of workers", value=7,
+    nb_workers = worker_row1[0].number_input("Number of people", value=4,
                                             help="Total number of people that will perform tasks")
     with_days_off = worker_row1[1].toggle("Add holidays", value=False,
-                                          help="Include off days for workers")
-    balance_daysoff = worker_row1[2].toggle("Balance holidays", value=False, 
+                                          help="Include off days")
+    
+    if with_days_off:
+        balance_daysoff = worker_row1[2].toggle("Balance holidays", value=False, 
                                             help="If true, worker will work only in proportion of his working days")
+    else:
+        balance_daysoff = False
 
     all_workers = []
     for i in range(nb_workers):
         worker_row1 = st.columns([2, 4])
-        worker_name = worker_row1[0].text_input(f"Worker name", value=f"Worker {i+1}", key=f"worker_name_{i}")
+        worker_name = worker_row1[0].text_input(f"Name", value=f"Person {i+1}", key=f"worker_name_{i}")
 
         if with_days_off:
             worker_days_off = worker_row1[1].multiselect("Holidays", options=selected_days, default=[], key=f"worker_days_off_{i}",
@@ -122,24 +151,21 @@ with settings.container(border=True):
 
  
 with tables:
+
     row1 = st.columns([10])
-    row1[0].header("Schedule")
+    row1[0].markdown("<h2 style='text-align: center;'>Schedule</h2>", unsafe_allow_html=True)
     row2 = st.columns([10])
     schedule_display = row2[0].dataframe(pd.DataFrame(columns=["Tasks"] + selected_days),
                                          hide_index=True, use_container_width=True)
 
     row5 = st.columns([10])
-    row5[0].header("Affectation per day")
+    row5[0].markdown("<h3 style='text-align: center;'>Affectation per day</h3>", unsafe_allow_html=True)
     row6 = st.columns([10])
     task_agg = row6[0].dataframe(pd.DataFrame(columns=["Days"] + workers),  hide_index=True, use_container_width=True)
 
-    row3 = st.columns([10])
-    row3[0].header("Affectation per task")
-    row4 = st.columns([10])
-    time_agg = row4[0].dataframe(pd.DataFrame(columns=["Tasks"] + workers), hide_index=True, use_container_width=True)
 
     row7 = st.columns([10])
-    row7[0].header("Affectation per daily task")
+    row7[0].markdown("<h3 style='text-align: center;'>Affectation per task</h3>", unsafe_allow_html=True)
     row8 = st.columns([10])
     task_per_day_agg = row8[0].dataframe(pd.DataFrame(columns=["Tasks"] + workers),  hide_index=True, use_container_width=True)
 
@@ -157,17 +183,21 @@ if submit:
     }
     print(payload)
 
-    res = requests.post("http://localhost:8080/schedule", json=payload)
-    all_agg = res.json()
+    res1 = requests.post("http://localhost:8080/sat", json=payload)
+    sat_agg = res1.json()
 
-    print(all_agg["display"])
-    print(all_agg["type"])
-    print(all_agg["time"])
-    print(all_agg["jobs"])
+    if sat_agg["sat"]:
+        res = requests.post("http://localhost:8080/schedule", json=payload)
+        all_agg = res.json()
 
-    for layout, agg in zip([schedule_display, time_agg, task_agg, task_per_day_agg], ["display", "type", "time", "jobs"]):
-        if agg == "display":
-            set_df(layout, all_agg[agg], ["Tasks"] + selected_days)
-        else:
-            set_df(layout, all_agg[agg])
+        for layout, agg in zip([schedule_display, task_agg, task_per_day_agg], ["display", "time", "jobs"]):
+            if agg == "display":
+                set_df(layout, all_agg[agg], ["Tasks"] + selected_days)
+            else:
+                set_df(layout, all_agg[agg])
+    else:
+        print("NO", sat_agg)
 
+        sat_schedule(sat_agg["msg"])
+        #error_md.write(f"<h4 style='text-align: center; color:red'>{txt}</h2>", unsafe_allow_html=True)
+        
