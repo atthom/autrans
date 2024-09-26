@@ -38,7 +38,6 @@ function Scheduler(payload::Dict)
     N_first, N_last, days = payload["cutoff_N_first"], payload["cutoff_N_last"], payload["days"]
     task_per_day = [tasks[i] for i in payload["task_per_day"] .+ 1]
     total_task = length(task_per_day)*days - N_first - N_last
-    #all_task_indices = Vector{Tuple{STask, Vector{Int}}}()
 
     all_task_indices_per_day = task_indices(task_per_day, days, N_first, N_last)
 
@@ -103,36 +102,17 @@ end
 
 function difficulty(s::Scheduler)
     nb_workers = length(s.workers)
-
     possible_states = 1
+
     for (day_idx, indices) in enumerate(s.daily_indices)
         worker_working = [w for w in 1:nb_workers if !in(day_idx-1, s.workers[w].days_off)]
         
         for t in indices
             task = get_task(s, t)
-            println(binomial(length(worker_working), task.worker_slots))
             possible_states *= binomial(length(worker_working), task.worker_slots)
         end
     end
     return possible_states
-end
-
-function min_arrangements(s::Scheduler)
-    nb_workers = length(s.workers)
-
-    number_of_states = []
-
-    for (day_idx, indices) in enumerate(s.daily_indices)
-        worker_working = [w for w in 1:nb_workers if !in(day_idx-1, s.workers[w].days_off)]
-        
-        for t in indices
-            task = get_task(s, t)
-            free_states = binomial(length(worker_working), task.worker_slots)
-            push!(number_of_states, (t, free_states))
-        end
-    end
-    free_states = sort(number_of_states, by=x->x[2])
-    return free_states
 end
 
 
@@ -158,7 +138,6 @@ end
 
 function task_type_indices(all_task_indices_per_day)
     unique_tasks = unique([t for (t, i) in all_task_indices_per_day])
-
     all_indices = [(t, Int[]) for t in unique_tasks]
 
     for (t, indices) in all_indices

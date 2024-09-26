@@ -1,5 +1,4 @@
 
-using Plots
 
 function can_work(perm, day, worker_off)
     for (i, days_off) in worker_off
@@ -9,28 +8,6 @@ function can_work(perm, day, worker_off)
     end
     return true
 end
-
-function get_neighbors(s::Scheduler, schedule)
-    neighbors = Vector{Matrix{Bool}}()
-    nb_task, nb_workers = size(schedule) 
-    worker_off = [(i, w.days_off) for (i, w) in enumerate(s.workers) if length(w.days_off) != 0]
-
-    for id_task in 1:nb_task
-        all_perm = multiset_permutations(schedule[id_task, :], nb_workers)
-        day = findfirst(x -> id_task in x, s.daily_indices)
-
-        for perm in all_perm
-            if can_work(perm, day, worker_off) && schedule[id_task, :] != perm
-                nei = copy(schedule)
-                nei[id_task, :] .= perm
-                push!(neighbors, nei)
-            end
-        end
-    end
-    return neighbors
-end
-
-
 
 mse(arr) = @chain arr begin
     extrema(_, dims=2)
@@ -54,19 +31,12 @@ end
 function task_per_day_loss(scheduler, schedule, nb_worker)
     # equity between worker in type of task assigned
     agg_all_tasks_per_day = zeros(Int, (length(scheduler.all_task_indices_per_day), nb_worker))
-
-    #worker_off = [length(w.days_off) for w in scheduler.workers]
+    
     for (id_t, (t, indices)) in enumerate(scheduler.all_task_indices_per_day)
         agg_all_tasks_per_day[id_t, :] = sum(schedule[indices, :], dims=1)
-        #avg_task = t.worker_slots / nb_worker
-        #agg_all_tasks_per_day[id_t, :] += (worker_off*avg_task)
 
     end
     
-    #coeff_task = [scheduler.days - length(w.days_off) for w in scheduler.workers]
-    #coeff_task = scheduler.days ./ coeff_task
-    
-    #agg_all_tasks_per_day_coeff = agg_all_tasks_per_day .* coeff_task'
     return agg_all_tasks_per_day, mse(agg_all_tasks_per_day)
 end
 
@@ -76,11 +46,6 @@ function type_task_loss(scheduler, agg_all_tasks_per_day, nb_worker)
         agg_type_task[id_t, :] = sum(agg_all_tasks_per_day[indices, :], dims=1)
     end
 
-    # update agg_tasks (people with less days should work less)
-    #coeff_task = [scheduler.days - length(w.days_off) for w in scheduler.workers]
-    #coeff_task = coeff_task ./ scheduler.days
-
-    #agg_type_task = agg_type_task .* coeff_task'
     agg_worker = sum(agg_type_task, dims=1)
     return mse(agg_type_task) + mse(agg_worker)
 end
@@ -93,28 +58,6 @@ function workload_loss(scheduler, schedule, nb_workers)
     end
 
     return mse(agg_all_days, scheduler)
-end
-
-function shuffle_team_loss(scheduler, schedule, nb_worker)
-    # to mix the team a bit
-    #agg_shuffle = zeros(Int, div(nb_worker*(nb_worker+1), 2))
-    agg_shuffle = zeros(Int, nb_worker*nb_worker)
-    c = 0
-    for w1 in 1:nb_worker
-        for w2 in 1:nb_worker
-            c +=1
-            agg_shuffle[c] = sum(schedule[:, w1] .&& schedule[:, w2])
-        end
-    end
-
-    #coeff_task = [scheduler.days - length(w.days_off) for w in scheduler.workers]
-    #coeff_task = coeff_task ./ scheduler.days
-
-    #agg_shuffle = agg_shuffle .* coeff_task
-
-    agg_shuffle = maximum(agg_shuffle) - minimum(agg_shuffle)
-
-    return agg_shuffle^2 * 0.1
 end
 
 
@@ -130,8 +73,6 @@ function fitness(scheduler, schedule, verbose=false)
 
     agg_workload_loss = workload_loss(scheduler, schedule, nb_workers)
 
-    #agg_shuffle_loss = shuffle_team_loss(scheduler, schedule, nb_workers)
-
     if verbose
         println("agg_type_loss=$agg_type_loss, agg_type_loss2=$agg_type_loss2, agg_workload_loss=$agg_workload_loss")
     end
@@ -140,93 +81,6 @@ function fitness(scheduler, schedule, verbose=false)
     return agg_type_loss + agg_workload_loss + agg_type_loss2 #+ agg_shuffle_loss
 end
 
-
-
-function genetic_search(scheduler; pop_size=50, nb_gen = 2000)
-    population = [seed(scheduler) for i in 1:pop_size]
-    
-    current_gen = 0
-    while current_gen < nb_gen
-        all_fitness = fitness.(Ref(scheduler), population) * -1
-        min_fit, max_fit = extrema(all_fitness)
-
-        println("$current_gen : Best fit $max_fit, Worse fit $min_fit")
-
-        min_max_fitness = @. (all_fitness - min_fit) / (max_fit - min_fit)
-        selected = [idx for (idx, p) in enumerate(min_max_fitness) if p >= rand()]
-        population = population[selected]
-
-        to_reproduce = pop_size - length(population)
-
-        all_nei = [nei for individual in population for nei in get_neighbors(scheduler, individual)]
-        selected_birth = all_nei[rand(1:length(all_nei), to_reproduce)]
-        
-        population = vcat(population, selected_birth)
-        current_gen += 1
-    end
-
-    all_fitness = fitness.(Ref(scheduler), population)
-    best = population[argmax(all_fitness)]
-
-    return best
-end
-
-
-function simple_search(scheduler; nb_gen = 5000)
-    best = seed(scheduler)
-    
-    i = 0
-    while i < nb_gen
-        best_fit = 10000000
-        all_nei = get_neighbors(scheduler, best)
-        println("gen $i, best fitness: $(fitness(scheduler, best))")
-        for nei in all_nei
-            current_fit = fitness(scheduler, nei)
-            if current_fit < best_fit
-                best = nei
-                best_fit = current_fit
-            end
-        end
-        i += 1
-    end
-    return best
-end
-
-
-function tabu_search(scheduler; nb_gen = 200, maxTabuSize=50)
-    best = seed(scheduler)
-    #best = permutations_seed(scheduler)
-    bestCandidate = best
-    tabu_list = Vector{Matrix{Bool}}()
-    push!(tabu_list, best)
-    i = 0
-    while i < nb_gen
-        best_fit = 10000000
-        all_nei = get_neighbors(scheduler, bestCandidate)
-        println("gen $i, tabu_size: $(length(tabu_list)) best fitness: $(fitness(scheduler, bestCandidate))")
-        for nei in all_nei
-            current_fit = fitness(scheduler, nei)
-            if nei ∉ tabu_list && current_fit < best_fit
-                bestCandidate = nei
-                best_fit = current_fit
-            end
-        end
-        if best_fit == 10000000 
-            break
-        elseif best_fit < fitness(scheduler, best)
-            best = bestCandidate
-        end
-
-        push!(tabu_list, bestCandidate)
-
-        if length(tabu_list) > maxTabuSize
-            popfirst!(tabu_list)
-        end
-        i += 1
-    end
-
-    return best
-end
 
 
 function permutations_seed(scheduler)
@@ -328,11 +182,64 @@ function optimize_task_per_day(scheduler, best, nb_workers)
     return best
 end
 
+function optimize_workload(scheduler, all_schedules, best, nb_workers)
+    current_loss = workload_loss(scheduler, best, nb_workers)
+
+
+    for (idx_day, indices) in enumerate(scheduler.daily_indices)
+        t, l = task_per_day_loss(scheduler, best, nb_workers)
+        agg_all_days = zeros(Int, (scheduler.days, nb_workers))
+
+        for (i, d) in enumerate(scheduler.daily_indices)
+            agg_all_days[i, :] = sum(best[d, :], dims=1)
+        end
+
+        m1, m2 = extrema(agg_all_days[idx_day, :])
+        if m2 - m1 < 2
+            continue
+        end
+
+        all_worker_max = findall(x-> x > m1, agg_all_days[idx_day, :])
+        all_worker_min = findall(x-> x < m2, agg_all_days[idx_day, :])
+
+        possible_arrangements = []
+        for (worker_max, worker_min) in Base.product(all_worker_max, all_worker_min)
+            possible_tasks = zip(best[indices, worker_max], best[indices, worker_min]) |> collect
+            possible_tasks = indices[findall(x-> x[1] && !x[2], possible_tasks)]
+            
+            for t in possible_tasks
+                push!(possible_arrangements, (worker_max, worker_min, t))
+            end
+        end
+
+        for (worker_max, worker_min, id_t1) in possible_arrangements
+            
+            for indice_idx in scheduler.daily_indices
+                
+                all_task_day = zip(best[indice_idx, worker_max], best[indice_idx, worker_min]) |> collect
+                indices_t2 = indice_idx[findall(x-> !x[1] && x[2], all_task_day)]
+                
+                for id_t2 in indices_t2
+                    new_schedule = sequence_swap(copy(best), worker_max, worker_min, id_t1, id_t2)
+                    l = workload_loss(scheduler, new_schedule, nb_workers)
+                    #println("$worker_max, $worker_min, $id_t1, $id_t2, $l")
+                    if (new_schedule != best) && (l < current_loss)
+                        push!(all_schedules, new_schedule)
+                    end
+                end
+            end
+        end
+
+    end
+end
+
+
 function square_trick(scheduler, best)
     nb_tasks, nb_workers = size(best)
 
     map_day_task = Dict(
-        i => idx for i in 1:scheduler.total_tasks for (idx, (t, indices)) in enumerate(scheduler.all_task_indices_per_day) if i in indices
+        i => idx for i in 1:scheduler.total_tasks 
+        for (idx, (t, indices)) in enumerate(scheduler.all_task_indices_per_day) if i in indices
     )
 
     for indices in scheduler.daily_indices
@@ -375,57 +282,6 @@ function square_trick(scheduler, best)
     return best
 end
 
-function optimize_workload(scheduler, all_schedules, best, nb_workers)
-    current_loss = workload_loss(scheduler, best, nb_workers)
-
-
-    for (idx_day, indices) in enumerate(scheduler.daily_indices)
-        t, l = task_per_day_loss(scheduler, best, nb_workers)
-        agg_all_days = zeros(Int, (scheduler.days, nb_workers))
-
-        for (i, d) in enumerate(scheduler.daily_indices)
-            agg_all_days[i, :] = sum(best[d, :], dims=1)
-        end
-
-        m1, m2 = extrema(agg_all_days[idx_day, :])
-        if m2 - m1 < 2
-            continue
-        end
-
-        all_worker_max = findall(x-> x > m1, agg_all_days[idx_day, :])
-        all_worker_min = findall(x-> x < m2, agg_all_days[idx_day, :])
-
-        possible_arrangements = []
-        for (worker_max, worker_min) in Base.product(all_worker_max, all_worker_min)
-            possible_tasks = zip(best[indices, worker_max], best[indices, worker_min]) |> collect
-            possible_tasks = indices[findall(x-> x[1] && !x[2], possible_tasks)]
-            
-            for t in possible_tasks
-                push!(possible_arrangements, (worker_max, worker_min, t))
-            end
-        end
-
-        for (worker_max, worker_min, id_t1) in possible_arrangements
-            
-            #println("$(length(possible_arrangements)), $(length(good_day))")
-            for indice_idx in scheduler.daily_indices
-                
-                all_task_day = zip(best[indice_idx, worker_max], best[indice_idx, worker_min]) |> collect
-                indices_t2 = indice_idx[findall(x-> !x[1] && x[2], all_task_day)]
-                
-                for id_t2 in indices_t2
-                    new_schedule = sequence_swap(copy(best), worker_max, worker_min, id_t1, id_t2)
-                    l = workload_loss(scheduler, new_schedule, nb_workers)
-                    #println("$worker_max, $worker_min, $id_t1, $id_t2, $l")
-                    if (new_schedule != best) && (l < current_loss)
-                        push!(all_schedules, new_schedule)
-                    end
-                end
-            end
-        end
-
-    end
-end
 
 function optimize_permutations(scheduler; nb_gen=10)
     all_res = []

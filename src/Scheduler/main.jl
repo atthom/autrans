@@ -6,6 +6,7 @@ using DataStructures
 using StatsBase
 using HTTP
 using Oxygen
+using Plots
 
 include("structures.jl")
 include("core.jl")
@@ -35,31 +36,35 @@ function process_payload(req::HTTP.Request)
         "balance_daysoff" => schedule_payload.balance_daysoff
     )
 
-    @show payload
+    #@show payload
 
     return Scheduler(payload)
 end
 
 @post "/schedule" function(req::HTTP.Request)
-    scheduler = process_payload(req)
-    @time schedule = optimize_permutations(scheduler, nb_gen = 10)
-    payload_back = Dict(
-        "jobs" => agg_jobs(scheduler, schedule),
-        "type" => agg_type(scheduler, schedule),
-        "time" => agg_time(scheduler, schedule),
-        "display" => agg_display(scheduler, schedule)
-    )
+    @time begin
+        scheduler = process_payload(req)
+        schedule = optimize_permutations(scheduler, nb_gen = 10)
+        payload_back = Dict(
+            "jobs" => agg_jobs(scheduler, schedule),
+            "type" => agg_type(scheduler, schedule),
+            "time" => agg_time(scheduler, schedule),
+            "display" => agg_display(scheduler, schedule)
+        )
+    end
     return payload_back
 end
 
 
 @post "/sat" function(req::HTTP.Request)
-    scheduler = process_payload(req)
-    @time sat, answer = check_satisfability(scheduler)
-    payload_back = Dict(
-        "sat" => sat,
-        "msg" => answer
-    )
+    @time begin
+        scheduler = process_payload(req)
+        sat, answer = check_satisfability(scheduler)
+        payload_back = Dict(
+            "sat" => sat,
+            "msg" => answer
+        )
+    end
     return payload_back
 end
 

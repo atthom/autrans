@@ -22,27 +22,22 @@ def set_df(layout, payload, cols=[]):
 
 st.set_page_config(page_title="Autrans", page_icon="🧊", layout="wide")
 
+if False:
+    st.markdown("""
+        <style>
+            .reportview-container {
+                margin-top: -2em;
+            }
+            #MainMenu {visibility: hidden;}
+            .stDeployButton {display:none;}
+            footer {visibility: hidden;}
+            #stDecoration {display:none;}
+        </style>
+    """, unsafe_allow_html=True)
 
-st.markdown("""
-    <style>
-        .reportview-container {
-            margin-top: -2em;
-        }
-        #MainMenu {visibility: hidden;}
-        .stDeployButton {display:none;}
-        footer {visibility: hidden;}
-        #stDecoration {display:none;}
-    </style>
-""", unsafe_allow_html=True)
-
-#header1, header2, header3 = st.columns([4, 4, 4])
-#header2.title("Autrans")
-#header2.subheader("Automated Scheduling Tool")
 st.markdown("<h1 style='text-align: center;'>Autrans</h1>", unsafe_allow_html=True)
 st.markdown("<h2 style='text-align: center;'>Automated Scheduling Tool</h2>", unsafe_allow_html=True)
 
-#st.write("# Autrans")
-#st.markdown('#')
 
 st.markdown("")
 st.markdown("")
@@ -96,20 +91,9 @@ with settings.container(border=True):
                                                help="Name of the task")
         nb_worker_i = task_row_i[1].number_input("People required", value=2, key=f"task_workers_{i}",
                                                help="Number of people needed to complete the task")
-        #task_difficulty_i = task_row_i[2].number_input("Task difficulty", value=1, key=f"task_difficulty_{i}")
         all_tasks.append((task_name_i, nb_worker_i, 1))
 
-    #task_row4 = st.columns([6])
     task_per_day, _, _ = zip(*all_tasks)
-
-    #task_per_day = st_tags(
-    #        label="Order of the tasks in a typical day:",
-    #        text="add more",
-    #        value=[all_task_names[0], all_task_names[-1], all_task_names[0]],
-    #        suggestions=all_task_names,
-    #        maxtags = 15,
-    #        key="task_per_day")
-    #task_row4[0] = task_per_day
 
     st.divider()
 
@@ -182,13 +166,19 @@ if submit:
         "balance_daysoff": balance_daysoff
     }
     print(payload)
+    import time
 
-    res1 = requests.post("http://localhost:8080/sat", json=payload)
+    t = time.time()
+    res1 = requests.post("http://127.0.0.1:8080/sat", json=payload)
     sat_agg = res1.json()
 
+    t_sat = round(time.time() - t, 2)
+
     if sat_agg["sat"]:
-        res = requests.post("http://localhost:8080/schedule", json=payload)
+        res = requests.post("http://127.0.0.1:8080/schedule", json=payload)
         all_agg = res.json()
+        
+        t_schedule = round(time.time() - t, 2)
 
         for layout, agg in zip([schedule_display, task_agg, task_per_day_agg], ["display", "time", "jobs"]):
             if agg == "display":
@@ -199,5 +189,6 @@ if submit:
         print("NO", sat_agg)
 
         sat_schedule(sat_agg["msg"])
-        #error_md.write(f"<h4 style='text-align: center; color:red'>{txt}</h2>", unsafe_allow_html=True)
+    t_total = round(time.time() - t, 2)
+    print(t_sat, t_schedule, t_total)
         
