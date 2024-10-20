@@ -113,3 +113,48 @@ function get_neighbors(s::Scheduler, schedule)
 end
 
 
+
+
+
+function benchmark2()
+    using Autrans
+    using ProfileView
+    nb_workers, nb_tasks, nb_days = 10, 10, 20
+    payload = Dict(
+        "workers" => [("Worker $i_worker", Int[]) for i_worker in 1:nb_workers],
+        "tasks"=> [("Task $i_task", 2, 1) for i_task in 1:nb_tasks],
+        "task_per_day"=> 0:nb_tasks-1 |> collect,
+        "days" => nb_days, 
+        "cutoff_N_first" => 0,
+        "cutoff_N_last" => 0,
+        "balance_daysoff" => false
+    )
+    scheduler = Autrans.Scheduler(payload)
+    @profview [Autrans.optimize_permutations(scheduler, nb_gen = 10) for i in 1:10]
+
+end
+function benchmark_scheduler()
+
+    all_results = []
+    nb_workers = 10
+    for nb_tasks in 10:10:100, nb_days in 10:10:100
+        println("$nb_tasks, $nb_days")
+        payload = Dict(
+            "workers" => [("Worker $i_worker", Int[]) for i_worker in 1:nb_workers],
+            "tasks"=> [("Task $i_task", 2, 1) for i_task in 1:nb_tasks],
+            "task_per_day"=> 0:nb_tasks-1 |> collect,
+            "days" => nb_days, 
+            "cutoff_N_first" => 0,
+            "cutoff_N_last" => 0,
+            "balance_daysoff" => false
+        )
+
+        scheduler = Scheduler(payload)
+        t = @elapsed schedule = optimize_permutations(scheduler, nb_gen = 10)
+        push!(all_results, Dict("nb_tasks" => nb_tasks, "nb_days" => nb_days, "time" => t))
+    end
+
+    df = DataFrame(all_results)
+
+    PlotlyJS.plot(df, kind="scatter", mode="lines", x=:nb_days, y=:time, group=:nb_tasks)
+end

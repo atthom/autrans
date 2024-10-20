@@ -18,7 +18,15 @@ def set_df(layout, payload, cols=[]):
     df = pd.DataFrame(data, columns=payload["colindex"]["names"])
     if cols != []:
         df.columns = cols
-    layout = layout.dataframe(df, use_container_width=True)
+    layout = layout.dataframe(df, use_container_width=True, hide_index=True)
+
+
+def make_table(title, cols):
+    row1 = st.columns([10])
+    row1[0].markdown(f"<h3 style='text-align: center;'>{title}</h3>", unsafe_allow_html=True)
+
+    row2 = st.columns([10])
+    return row2[0].dataframe(pd.DataFrame(columns=cols), hide_index=True, use_container_width=True)
 
 st.set_page_config(page_title="Autrans", page_icon="🧊", layout="wide")
 
@@ -103,12 +111,13 @@ with settings.container(border=True):
     worker_row1 = st.columns([2, 2, 2], vertical_alignment="center")
     nb_workers = worker_row1[0].number_input("Number of people", value=4,
                                             help="Total number of people that will perform tasks")
-    with_days_off = worker_row1[1].toggle("Add holidays", value=False,
-                                          help="Include off days")
+    with_days_off = worker_row1[1].toggle("Add days off", value=False,
+                                          help="Include holidays")
     
     if with_days_off:
-        balance_daysoff = worker_row1[2].toggle("Balance holidays", value=False, 
-                                            help="If true, worker will work only in proportion of his working days")
+        balance_daysoff = worker_row1[2].toggle("Balance days off", value=False, 
+                                            help="""If true, workers will work in proportion of theirs working days.
+                                                If false, worker in vacation will catch up on their vacation days.""")
     else:
         balance_daysoff = False
 
@@ -118,7 +127,7 @@ with settings.container(border=True):
         worker_name = worker_row1[0].text_input(f"Name", value=f"Person {i+1}", key=f"worker_name_{i}")
 
         if with_days_off:
-            worker_days_off = worker_row1[1].multiselect("Holidays", options=selected_days, default=[], key=f"worker_days_off_{i}",
+            worker_days_off = worker_row1[1].multiselect("Days off", options=selected_days, default=[], key=f"worker_days_off_{i}",
                                                          help="Select on which days this person will not be working")
         else:
             worker_days_off = []
@@ -135,24 +144,15 @@ with settings.container(border=True):
 
  
 with tables:
+    
+    schedule_display = make_table("Schedule", ["Tasks"] + selected_days)
+    
+    task_agg = make_table("Affectation per day", ["Days"] + workers)
 
-    row1 = st.columns([10])
-    row1[0].markdown("<h2 style='text-align: center;'>Schedule</h2>", unsafe_allow_html=True)
-    row2 = st.columns([10])
-    schedule_display = row2[0].dataframe(pd.DataFrame(columns=["Tasks"] + selected_days),
-                                         hide_index=True, use_container_width=True)
-
-    row5 = st.columns([10])
-    row5[0].markdown("<h3 style='text-align: center;'>Affectation per day</h3>", unsafe_allow_html=True)
-    row6 = st.columns([10])
-    task_agg = row6[0].dataframe(pd.DataFrame(columns=["Days"] + workers),  hide_index=True, use_container_width=True)
+    task_per_day_agg = make_table("Affectation per task", ["Tasks"] + workers)
 
 
-    row7 = st.columns([10])
-    row7[0].markdown("<h3 style='text-align: center;'>Affectation per task</h3>", unsafe_allow_html=True)
-    row8 = st.columns([10])
-    task_per_day_agg = row8[0].dataframe(pd.DataFrame(columns=["Tasks"] + workers),  hide_index=True, use_container_width=True)
-
+    
 
 if submit:
     

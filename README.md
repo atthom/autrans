@@ -5,8 +5,8 @@
 
 ### Start Julia backend
 
-`julia ./src/main.jl`
+`julia ./src/Autrans.jl`
 
 ### Start Python UI
 
-`streamlit run ./src/streamlitUI.py`
+`streamlit run ./src/AutransUI.py`

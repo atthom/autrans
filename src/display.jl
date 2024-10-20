@@ -1,10 +1,12 @@
 
+using Chain
 
 function agg_jobs(scheduler::Scheduler, schedule)
     tasks_agg = DataFrame(Tasks=[t.name for t in scheduler.task_per_day])
     nb_jobs = length(scheduler.task_per_day)
     
     for id_worker in 1:length(scheduler.workers)
+        
         jobs = findall(x -> x==1, schedule[:, id_worker])
         jobs = (jobs .+ scheduler.cutoff_N_first) .% nb_jobs
         jobs = countmap(jobs)
@@ -18,32 +20,30 @@ function agg_jobs(scheduler::Scheduler, schedule)
 end
 
 function agg_type(scheduler::Scheduler, schedule)
-    df_jobs = agg_jobs(scheduler, schedule)
-    grp_df =  groupby(df_jobs, :Tasks)
-    workers = [w.name for w in scheduler.workers] 
-    new_df = combine(grp_df, workers .=> sum)
+    names = [w.name for w in scheduler.workers]
 
-    col_names = vcat(["Tasks"], [w.name for w in scheduler.workers])
-    new_df = rename(new_df, col_names)
-    push!(new_df, vcat("Total", sum(schedule, dims=1)...))
-    return new_df
+    @chain schedule begin
+        agg_jobs(scheduler, _)
+        groupby(_, :Tasks)
+        combine(_, names .=> sum)
+        rename(_, vcat(["Tasks"], names))
+        push!(_, vcat("Total", sum(schedule, dims=1)...))
+    end
 end
 
 
 function agg_time(scheduler::Scheduler, schedule)
-    all_days = []
-
-    for day in scheduler.daily_indices
-        push!(all_days, sum(schedule[day, :], dims=1))
-    end
-
-    df = DataFrame(vcat(all_days...), [w.name for w in scheduler.workers])
+    names = [w.name for w in scheduler.workers]
     days = DataFrame(Days=["Jour $i" for i in 1:scheduler.days])
-    agg_all_days = hcat(days, df)
-    push!(agg_all_days, vcat("Total", sum(schedule, dims=1)...))
-    return agg_all_days
-end
 
+    @chain scheduler.daily_indices begin
+        [sum(schedule[day, :], dims=1) for day in _]
+        vcat(_...)
+        DataFrame(_, names)
+        hcat(days, _)
+        push!(_, vcat("Total", sum(schedule, dims=1)...))
+    end
+end
 
 function agg_display(scheduler::Scheduler, schedule)
     tasks_agg = DataFrame(Tasks=[t.name for t in scheduler.task_per_day])

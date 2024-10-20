@@ -4,14 +4,23 @@ authors = ["atthom <thom.jalabert@gmail.com>"]
 version = "0.1.0"
 
 [deps]
-BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
 Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
-GenieFramework = "a59fdf5c-6bf0-4f5d-949c-a137c9e2f353"
+HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 Metaheuristics = "bcdb8e00-2c21-11e9-3065-2b553b22f898"
-SearchSpaces = "eb7571c6-2196-4f03-99b8-52a5a35b3163"
+Oxygen = "df9a0d86-3283-4920-82dc-4555fc0d1d8b"
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
-Stipple = "4acbeb90-81a0-11ea-1966-bdaff8155998"
-StippleUI = "a3c5d34a-b254-4859-a8fa-b86abb7e84a3"
+
+[compat]
+Chain = "0.5.0"
+Combinatorics = "1.0.2"
+DataFrames = "1.5.0"
+DataStructures = "0.18.15"
+HTTP = "1.10.8"
+Metaheuristics = "3.3.5"
+Oxygen = "1.5.13"
+Plots = "1.40.8"
+StatsBase = "0.34.0"
