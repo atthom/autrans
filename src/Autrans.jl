@@ -48,7 +48,7 @@ end
 @post "/schedule" function(req::HTTP.Request)
     @time begin
         scheduler = process_payload(req)
-        schedule = optimize_permutations(scheduler, nb_gen = 10)
+        schedule = optimize_permutations(scheduler)
         payload_back = Dict(
             "jobs" => agg_jobs(scheduler, schedule),
             "type" => agg_type(scheduler, schedule),
@@ -73,7 +73,7 @@ end
 end
 
 
-#serve()
+serve()
 
 
 end

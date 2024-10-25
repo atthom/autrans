@@ -71,7 +71,7 @@ function fitness(scheduler, schedule, verbose=false)
 end
 
 
-function correct_weigts(wv, slots)
+function correct_weights(wv, slots)
     min_work, max_work = extrema(wv)
 
     if max_work == min_work
@@ -87,48 +87,13 @@ end
 
 get_weights(workload, slots) = @chain workload begin
     getindex.(_, 2)
-    correct_weigts(_, slots)
+    correct_weights(_, slots)
     _ .^ 2
     Weights
 end
 
 
-function permutations_seed(scheduler)
-
-    rebalance = @chain scheduler.all_task_indices_per_day begin
-        [t.worker_slots*length(indices) for (t, indices) in _]
-        sum
-        _ / length(scheduler.workers) / scheduler.days
-        [_*length(w.days_off) for w in scheduler.workers]
-        reshape(_, 1, length(_))
-    end
-
-    nb_workers = length(scheduler.workers)
-    slots = zeros(Bool, (scheduler.total_tasks, nb_workers))
-
-    for (day_idx, indices) in enumerate(scheduler.daily_indices)
-        for t in indices
-            task = get_task(scheduler, t)
-            workload = sum(slots, dims=1) 
-            if scheduler.balance_daysoff
-                workload += rebalance
-            end
-
-            workload = [(i, w) for (i, w) in enumerate(workload) if !in(day_idx-1, scheduler.workers[i].days_off)]
-
-            @chain workload begin
-                get_weights(_, task.worker_slots)
-                StatsBase.sample(workload, _, task.worker_slots, replace=false)
-                getindex.(_, 1)
-                slots[t, _] .= 1
-            end
-
-        end
-    end
-    slots
-end
-
-function Autrans.sequence_swap(best, worker_max, worker_min, task_give, task_take)
+function sequence_swap(best, worker_max, worker_min, task_give, task_take)
     affectation_give = CartesianIndex(task_give, worker_max)
     affectation_take = CartesianIndex(task_give, worker_min)
 
@@ -167,234 +132,6 @@ function day_available(scheduler, worker_max, worker_min, day1, day2)
 end
 
 
-function optimize_task_per_day2(scheduler, best, nb_workers)
-    cost_matrix, loss = task_per_day_loss(scheduler, best, nb_workers)
-
-    task_affected, nb_workers = size(cost_matrix)
-    all_squares = Iterators.product(1:task_affected, 1:task_affected, 1:nb_workers, 1:nb_workers)
-
-    all_squares = Iterators.filter(x -> (x[1] != x[2]) & (x[3] != x[4]), all_squares)
-    all_squares = Iterators.filter(x -> cost_matrix[x[1], x[3]] > cost_matrix[x[1], x[4]] +1, all_squares)
-    all_squares = Iterators.filter(x -> cost_matrix[x[2], x[4]] > cost_matrix[x[2], x[3]] +1, all_squares)
-
-
-
-    for (task_row, (task, task_index)) in enumerate(scheduler.all_task_indices_per_day)
-        t, l = task_per_day_loss(scheduler, best, nb_workers)
-
-        m1, m2 = extrema(t[task_row, :])
-        if m2 - m1 < 2
-            continue
-        end
-
-        worker_max, worker_min = argmax(t[task_row, :]), argmin(t[task_row, :])
-        task_to_give = argmax(best[task_index, worker_max])
-        task_to_give = task_index[task_to_give]
-
-        tasks_off = get_task_off(scheduler, worker_max, worker_min)
-
-        if task_to_give in tasks_off
-            continue
-        end
-
-        task_to_giveback = @chain t[:, worker_max] begin
-            argmin
-            scheduler.all_task_indices_per_day[_][2]
-            _, argmax(best[_, worker_min])
-            _[1][_[2]]
-        end
-
-        if task_to_giveback in tasks_off
-            continue
-        end
-        
-        best = sequence_swap(best, worker_max, worker_min, task_to_give, task_to_giveback)
-    end
-
-    return best
-end
-
-
-function optimize_task_per_day(scheduler, best, nb_workers)
-
-    for (task_row, (task, task_index)) in enumerate(scheduler.all_task_indices_per_day)
-        t, l = task_per_day_loss(scheduler, best, nb_workers)
-
-        m1, m2 = extrema(t[task_row, :])
-        if m2 - m1 < 2
-            continue
-        end
-
-        worker_max, worker_min = argmax(t[task_row, :]), argmin(t[task_row, :])
-        task_to_give = argmax(best[task_index, worker_max])
-        task_to_give = task_index[task_to_give]
-
-        tasks_off = get_task_off(scheduler, worker_max, worker_min)
-
-        if task_to_give in tasks_off
-            continue
-        end
-
-        task_to_giveback = @chain t[:, worker_max] begin
-            argmin
-            scheduler.all_task_indices_per_day[_][2]
-            _, argmax(best[_, worker_min])
-            _[1][_[2]]
-        end
-
-        if task_to_giveback in tasks_off
-            continue
-        end
-        
-        best = sequence_swap(best, worker_max, worker_min, task_to_give, task_to_giveback)
-    end
-
-    return best
-end
-
-filter_task(indices, constraints, tasks_off) = @chain constraints begin
-    findall
-    indices[_]
-    filter(x -> !in(x, tasks_off), _)
-end
-
-# best2 = square_trick2(scheduler, nothing, best)
-
-function Autrans.square_trick2(scheduler, map_day_task, best)
-    daily_indices = [(indices, sum(best[indices, :], dims=1)) for (day, indices) in enumerate(scheduler.daily_indices)]
-    daily_indices = filter(x -> maximum(x[2]) - minimum(x[2]) > 1, daily_indices)
-
-    if length(s) == 0
-        return best
-    end
-    #tasks_affected_indices = [id_task for (idx_day, agg) in s for id_task in scheduler.daily_indices[idx_day]]
-    #tasks_affected = get_task.(Ref(scheduler), tasks_affected_indices)
-
-    agg_all_day_affected = vcat(getindex.(daily_indices, 2)...)
-    day_affected, nb_workers = size(agg_all_day_affected)
-    all_squares = Iterators.product(1:day_affected, 1:nb_workers, 1:day_affected, 1:nb_workers)
-    all_squares = Iterators.filter(x -> (x[1] != x[3]) & (x[2] != x[4]), all_squares)
-    all_squares = Iterators.filter(x -> agg_all_day_affected[x[1], x[2]] > agg_all_day_affected[x[1], x[4]] +1, all_squares)
-    all_squares = Iterators.filter(x -> agg_all_day_affected[x[3], x[4]] > agg_all_day_affected[x[3], x[2]] +1, all_squares)
-    all_squares = Iterators.filter(x -> day_available(scheduler, x[2], x[4], x[1], x[3]), all_squares)
-
-    all_squares = Iterators.map(x -> (daily_indices[x[1]][1], x[2], daily_indices[x[3]][1], x[4]), all_squares)
-    all_squares = Iterators.filter(x -> best[x[1], x[2]] .&& .!best[x[1], x[4]], all_squares)
-    all_squares = Iterators.filter(x -> .!best[x[3], x[2]] .&& best[x[3], x[4]], all_squares)
-
-    # day1, worker1, day2, worker2
-    # since day1 != day2 and worker1 != worker2 it produce a square shape in the cost matrix
-    # exchanging tasks keeps the same number of tasks overall but reduce days with heavy workload
-    for (d1, w1, d2, w2) in Iterators.take(all_squares, 5)
-        println("$d1, $w1, $d2, $w2")
-        #tasks_off = Autrans.get_task_off(scheduler, w1, w2)
-
-        #tasks_d1 = filter(id -> !in(id, tasks_off), s[d1][1])
-        tasks_d1 = daily_indices[d1][1]
-        constraints_t1 = best[tasks_d1, w1] .&& .!best[tasks_d1, w2]
-        possible_t1 = tasks_d1[findall(constraints_t1)]
-
-        #tasks_d2 = filter(id -> !in(id, tasks_off), s[d2][1])
-        tasks_d2 = daily_indices[d2][1]
-        constraints_t2 = .!best[tasks_d2, w1] .&& best[tasks_d2, w2]
-        possible_t2 = tasks_d2[findall(constraints_t2)]
-        
-        for t1 in possible_t1
-            t = Autrans.get_task(scheduler, t1)
-            for t2 in possible_t2
-                if t == Autrans.get_task(scheduler, t2)
-                    println("swap $w1, $w2, $t1, $t2")
-                    return Autrans.sequence_swap(best, w1, w2, t1, t2)
-                end
-            end
-        end
-    end
-
-    return best
-end
-
-function square_trick(scheduler, map_day_task, best)
-    nb_tasks, _ = size(best)
-
-    for indices in scheduler.daily_indices
-        agg_day = sum(best[indices, :], dims=1)
-
-        m1, m2 = extrema(agg_day)
-        if m2 - m1 < 2
-            continue
-        end
-
-        all_max = getindex.(findall(x-> x == m2, agg_day), 2)
-        all_min = getindex.(findall(x-> x == m1, agg_day), 2)
-
-        for (worker_max, worker_min) in Base.product(all_max, all_min)
-            tasks_off = get_task_off(scheduler, worker_max, worker_min)
-
-            constraints_t1 = best[indices, worker_max] .&& .!best[indices, worker_min]
-            possible_t1 = filter_task(indices, constraints_t1, tasks_off)
-
-            start_idx = indices[end] +1
-            indices_t2 = start_idx:nb_tasks
-            
-            constraints_t2 = .!best[indices_t2, worker_max] .&& best[indices_t2, worker_min]
-            possible_t2 = filter_task(indices_t2, constraints_t2, tasks_off)
-
-            possible_task = Iterators.product(possible_t1, possible_t2) #|> collect
-            possible_task = Iterators.filter(x -> map_day_task[x[1]] == map_day_task[x[2]], possible_task) #|> collect
-
-            if !isempty(possible_task)
-                t1, t2 = first(possible_task)
-                best = sequence_swap(best, worker_max, worker_min, t1, t2)
-            end
-            
-        end
-    end
-    return best
-end
-
-
-function optimize_permutations(scheduler; nb_gen=10)
-    all_res = []
-
-    map_day_task = Dict(
-        i => idx for i in 1:scheduler.total_tasks 
-        for (idx, (t, indices)) in enumerate(scheduler.all_task_indices_per_day) if i in indices
-    )
-
-    for i in 1:nb_gen
-        println("New seed")
-        best = permutations_seed(scheduler)
-        current_fit = fitness(scheduler, best, false)
-        nb_tasks, nb_workers = size(best)
-
-        fit = 100000000000000
-        for i in 1:100
-            current_fit = fitness(scheduler, best, true)
-
-            best = optimize_task_per_day(scheduler, best, nb_workers)
-
-            current_fit = fitness(scheduler, best, true)
-
-            #best = square_trick2(scheduler, map_day_task, best)
-
-            current_fit = fitness(scheduler, best, false)
-
-            #if current_fit < fit
-            #    fit = current_fit
-            #else
-            #    break
-            #end
-        end
-        push!(all_res, best)
-    end
-    
-    best = all_res[argmin(fitness.(Ref(scheduler), all_res))]
-    println("best fitness: $(fitness(scheduler, best, false))")
-
-    return best
-end
-
-
 function check_days_off(scheduler, s)
 
     for (w_id, w) in enumerate(scheduler.workers)
@@ -404,4 +141,175 @@ function check_days_off(scheduler, s)
         end
     end
     
+end
+
+
+function permutations_seedOLD(scheduler)
+    rebalance = @chain scheduler.all_task_indices_per_day begin
+        [t.worker_slots*length(indices) for (t, indices) in _]
+        sum
+        _ / length(scheduler.workers) / scheduler.days
+        [_*length(w.days_off) for w in scheduler.workers]
+        reshape(_, 1, length(_))
+    end
+
+    nb_workers = length(scheduler.workers)
+    slots = zeros(Bool, (scheduler.total_tasks, nb_workers))
+
+    for (day_idx, indices) in enumerate(scheduler.daily_indices)
+        
+        for t in indices
+            task = get_task(scheduler, t)
+            workload = sum(slots, dims=1) 
+            if scheduler.balance_daysoff
+                workload += rebalance
+            end
+
+            workload = [(i, w) for (i, w) in enumerate(workload) if !in(day_idx-1, scheduler.workers[i].days_off)]
+
+            @chain workload begin
+                get_weights(_, task.worker_slots)
+                StatsBase.sample(workload, _, task.worker_slots, replace=false)
+                getindex.(_, 1)
+                slots[t, _] .= 1
+            end
+        end
+    end
+    slots
+end
+
+
+function permutations_seed(scheduler)
+    rebalance = @chain scheduler.all_task_indices_per_day begin
+        [t.worker_slots*length(indices) for (t, indices) in _]
+        sum
+        _ / length(scheduler.workers) / scheduler.days
+        [_*length(w.days_off) for w in scheduler.workers]
+        reshape(_, 1, length(_))
+    end
+
+    nb_workers = length(scheduler.workers)
+    slots = zeros(Bool, (scheduler.total_tasks, nb_workers))
+    task_type_correction = zeros(Int, (length(scheduler.all_task_indices_per_day), nb_workers))
+    task_type_map = Dict{String, Int}(task.name => id_type for (id_type, (task, indices)) in enumerate(scheduler.all_task_indices_per_day))
+
+    for (day_idx, indices) in enumerate(scheduler.daily_indices)
+        daily_workload = zeros(Int, (1, nb_workers))
+        
+        for t in indices
+            task = get_task(scheduler, t)
+            workload = sum(slots, dims=1) + daily_workload
+            if scheduler.balance_daysoff
+                workload += rebalance
+            end
+
+            type_task = task_type_map[task.name]
+            task_type_workload = reshape(task_type_correction[type_task, :], 1, nb_workers)
+            workload = workload + task_type_workload // 2 
+
+            #println("task_type_workload: $task_type_workload, size(task_type_workload): $(size(task_type_workload))")
+            #println("workload: $workload, size(workload): $(size(workload))")
+
+            
+            workload = [(i, w) for (i, w) in enumerate(workload) if !in(day_idx-1, scheduler.workers[i].days_off)]
+            workload = sort(workload, by=x->x[2], rev=false)
+            #println("slots: $(task.worker_slots) workload: $workload")
+            selected_workers = getindex.(workload, 1)
+            selected_workers = selected_workers[1:task.worker_slots]
+            slots[t, selected_workers] .= 1
+
+            task_type_correction[type_task, selected_workers] .+= 1
+
+            #show(stdout, "text/plain", task_type_correction)
+            #@chain workload begin
+            #    get_weights(_, task.worker_slots)
+            #    StatsBase.sample(workload, _, task.worker_slots, replace=false)
+            #    getindex.(_, 1)
+            #    slots[t, _] .= 1
+            #end
+            daily_workload += reshape(slots[t, :], 1, nb_workers)
+        end
+    end
+    slots
+end
+
+
+function optimize_task_per_day2(scheduler, best::Matrix{Bool})
+    nb_workers = length(scheduler.workers)
+    map_task_day = Dict{Int64, Int64}(id_t => day for (day, task) in enumerate(scheduler.daily_indices) for id_t in task)
+
+    cost_matrix, loss =  task_per_day_loss(scheduler, best, nb_workers)
+    task_affected, _ = size(cost_matrix)
+    
+    all_squares = Iterators.product(1:task_affected, 1:task_affected, 1:nb_workers, 1:nb_workers)
+    all_squares2 = Iterators.filter(x -> (x[1] != x[2]) & (x[3] != x[4]), all_squares)
+    all_squares3 = Iterators.filter(x -> cost_matrix[x[1], x[3]] > cost_matrix[x[1], x[4]]+1, all_squares2)
+    all_squares4 = Iterators.filter(x -> cost_matrix[x[2], x[4]] > cost_matrix[x[2], x[3]], all_squares3)
+    all_squares5 = Iterators.map(x -> (scheduler.all_task_indices_per_day[x[1]][2], 
+                                    scheduler.all_task_indices_per_day[x[2]][2],
+                                    x[3], x[4], x[1], x[2]), all_squares4)
+    all_squares6 = Iterators.flatmap(x -> Iterators.product(x[1], x[2], x[3], x[4], x[5], x[6]), all_squares5)
+    all_squares7 = Iterators.filter(x -> map_task_day[x[1]] == map_task_day[x[2]], all_squares6)
+    all_squares8 = Iterators.filter(x -> best[x[1], x[3]] & !best[x[1], x[4]], all_squares7)
+    all_squares9 = Iterators.filter(x -> !best[x[2], x[3]] & best[x[2], x[4]], all_squares8)
+
+
+    # task1, task2, worker1, worker2, type_task1, type_task2 
+    for (t1, t2, w1, w2, tp1, tp2) in all_squares9
+
+        #if w1 == 1 && w2 == 2 
+        #    println("swap $w1, $w2, $t1, $t2, $tp1, $tp2")
+        #    println("cost_matrix[tp1, w1] $(cost_matrix[tp1, w1]), cost_matrix[tp1, w2] $(cost_matrix[tp1, w2])")
+        #    println("cost_matrix[tp2, w1] $(cost_matrix[tp2, w1]), cost_matrix[tp2, w2] $(cost_matrix[tp2, w2])")
+        #    show(stdout, "text/plain", cost_matrix)
+        #    println("fitness: $(fitness(scheduler, best, true))")
+        #end
+
+        if (cost_matrix[tp1, w1] == cost_matrix[tp1, w2]) || (cost_matrix[tp2, w1] == cost_matrix[tp2, w2])
+            continue
+        end
+
+
+        best = sequence_swap(best, w1, w2, t1, t2)
+        cost_matrix[tp1, w1] -= 1
+        cost_matrix[tp1, w2] += 1
+
+        cost_matrix[tp2, w1] += 1
+        cost_matrix[tp2, w2] -= 1
+
+    end
+
+    return best
+end
+
+
+# BenchmarkTools.Trial: 173 samples with 1 evaluation.
+# Range (min … max):   3.214 ms … 143.372 ms  ┊ GC (min … max):  0.00% … 69.80%
+# Time  (median):     42.544 ms               ┊ GC (median):     0.00%
+# Time  (mean ± σ):   28.905 ms ±  25.128 ms  ┊ GC (mean ± σ):  16.49% ± 21.46%
+
+#  ▄█▇                    ▆█▇                                    
+#  ███▇▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▅███▅▅▁▁▁▅▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▅▁▆▅ ▅
+#  3.21 ms       Histogram: log(frequency) by time       103 ms <
+
+# Memory estimate: 6.69 MiB, allocs estimate: 32902.
+#BenchmarkTools.Trial: 1337 samples with 1 evaluation.
+# Range (min … max):  2.211 ms … 25.222 ms  ┊ GC (min … max):  0.00% … 2.90%
+# Time  (median):     3.612 ms              ┊ GC (median):    14.89%
+# Time  (mean ± σ):   3.727 ms ±  1.460 ms  ┊ GC (mean ± σ):  10.03% ± 9.16%
+
+#           ▁▄▄▃▂▃▆█▄▄▅█▇▄█▇▄ ▁                                
+#  ▂▂▂▃▃▄▅▆████████████████████▆▇▇▅▅▄▂▃▃▂▃▂▁▂▁▂▁▂▂▁▁▁▂▁▂▂▂▁▁▂ ▄
+#  2.21 ms        Histogram: frequency by time         6.4 ms <#
+#
+# Memory estimate: 5.93 MiB, allocs estimate: 29472.
+
+function optimize_permutations(scheduler)
+    best = permutations_seed(scheduler)
+
+    if fitness(scheduler, best) != 0
+        best = optimize_task_per_day2(scheduler, best)
+    end
+    
+    return best
 end
