@@ -1,10 +1,4 @@
 
-
-
-
-
-
-
 function genetic_search(scheduler; pop_size=50, nb_gen = 2000)
     population = [seed(scheduler) for i in 1:pop_size]
     
@@ -120,17 +114,48 @@ function benchmark2()
     using Autrans
     using ProfileView
     nb_workers, nb_tasks, nb_days = 10, 10, 20
+
+
+    for nb_workers in 2:20
+        payload = Dict(
+            "workers" => [("Worker $i_worker", Int[]) for i_worker in 1:nb_workers],
+            "tasks"=> [("Task $i_task", 2, 1) for i_task in 1:nb_tasks],
+            "task_per_day"=> 0:nb_tasks-1 |> collect,
+            "days" => nb_days, 
+            "cutoff_N_first" => 0,
+            "cutoff_N_last" => 0,
+            "balance_daysoff" => false
+        )
+        scheduler = Autrans.Scheduler(payload)
+        best = Autrans.permutations_seed(scheduler)
+        println("nb_workers: $nb_workers")
+        Autrans.fitness(scheduler, best, true)
+        best = Autrans.optimize_permutations(scheduler)
+        Autrans.fitness(scheduler, best, true)
+    end
+
+    nb_workers = 10
     payload = Dict(
-        "workers" => [("Worker $i_worker", Int[]) for i_worker in 1:nb_workers],
-        "tasks"=> [("Task $i_task", 2, 1) for i_task in 1:nb_tasks],
-        "task_per_day"=> 0:nb_tasks-1 |> collect,
-        "days" => nb_days, 
-        "cutoff_N_first" => 0,
-        "cutoff_N_last" => 0,
-        "balance_daysoff" => false
-    )
+            "workers" => [("Worker $i_worker", Int[]) for i_worker in 1:nb_workers],
+            "tasks"=> [("Task $i_task", 2, 1) for i_task in 1:nb_tasks],
+            "task_per_day"=> 0:nb_tasks-1 |> collect,
+            "days" => nb_days, 
+            "cutoff_N_first" => 0,
+            "cutoff_N_last" => 0,
+            "balance_daysoff" => false
+        )
     scheduler = Autrans.Scheduler(payload)
-    @profview [Autrans.optimize_permutations(scheduler, nb_gen = 10) for i in 1:10]
+    best = Autrans.permutations_seed(scheduler)
+    println("nb_workers: $nb_workers")
+    Autrans.fitness(scheduler, best, true)
+
+    agg_all_days = zeros(Int, (scheduler.days, nb_workers))
+    for (i, d) in enumerate(scheduler.daily_indices)
+        agg_all_days[i, :] = sum(best[d, :], dims=1)
+    end
+
+    
+    @profview [Autrans.optimize_permutations(scheduler) for i in 1:10]
 
 end
 function benchmark_scheduler()
