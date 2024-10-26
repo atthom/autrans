@@ -55,7 +55,7 @@ end
 
 function check_satisfability(scheduler::Scheduler; cutoff_workers=30, cutoff_tasks=20, cutoff_days=40)
     if length(scheduler.workers) > cutoff_workers
-        return false, "Too many workers ($cutoff_workersm max)"
+        return false, "Too many workers ($cutoff_workers max)"
     elseif length(scheduler.task_per_day) > cutoff_tasks
         return false, "Too many tasks ($cutoff_tasks max)"
     elseif scheduler.days > cutoff_days
