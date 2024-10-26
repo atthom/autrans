@@ -22,31 +22,33 @@ payload = {'workers': [('Person 1', []), ('Person 2', []), ('Person 3', []), ('P
            'balance_daysoff': False}
 
 
+#host = "http://127.0.0.1:8080"
+host = "http://157.97.106.100/api"
 print("cold start")
-res1 = requests.get("http://127.0.0.1:8080/sat")
-res1 = requests.post("http://127.0.0.1:8080/sat", json=payload)
-res1 = requests.post("http://127.0.0.1:8080/schedule", json=payload)
+res1 = requests.get(f"{host}/sat")
+res1 = requests.post(f"{host}/sat", json=payload)
+res1 = requests.post(f"{host}/schedule", json=payload)
 
 
-t = time.time()
+#t = time.time()
 MAX_REQ = 1000
+#for i in range(MAX_REQ):
+#    res1 = requests.get(f"{host}/sat")
+
+#btime = round(time.time() - t, 2)
+#print(f"{MAX_REQ} requests : {btime}s, thougput: {round(MAX_REQ / btime, 2)}req/s")
+
+t = time.time()
 for i in range(MAX_REQ):
-    res1 = requests.get("http://127.0.0.1:8080/sat")
+    res1 = requests.post(f"{host}/sat", json=payload)
 
 btime = round(time.time() - t, 2)
 print(f"{MAX_REQ} requests : {btime}s, thougput: {round(MAX_REQ / btime, 2)}req/s")
 
-t = time.time()
-for i in range(MAX_REQ):
-    res1 = requests.post("http://127.0.0.1:8080/sat", json=payload)
-
-btime = round(time.time() - t, 2)
-print(f"{MAX_REQ} requests : {btime}s, thougput: {round(MAX_REQ / btime, 2)}req/s")
-
 
 t = time.time()
 for i in range(MAX_REQ):
-    res1 = requests.post("http://127.0.0.1:8080/schedule", json=payload)
+    res1 = requests.post(f"{host}/schedule", json=payload)
 
 btime = round(time.time() - t, 2)
 print(f"{MAX_REQ} requests : {btime}s, thougput: {round(MAX_REQ / btime, 2)}req/s")

@@ -162,7 +162,7 @@ function benchmark_scheduler()
 
     all_results = []
     nb_workers = 10
-    for nb_tasks in 10:10:100, nb_days in 10:10:100
+    for nb_tasks in 10:2:100, nb_days in 10:2:100
         println("$nb_tasks, $nb_days")
         payload = Dict(
             "workers" => [("Worker $i_worker", Int[]) for i_worker in 1:nb_workers],
@@ -174,8 +174,8 @@ function benchmark_scheduler()
             "balance_daysoff" => false
         )
 
-        scheduler = Scheduler(payload)
-        t = @elapsed schedule = optimize_permutations(scheduler, nb_gen = 10)
+        scheduler = Autrans.Scheduler(payload)
+        t = @elapsed schedule = Autrans.optimize_permutations(scheduler)
         push!(all_results, Dict("nb_tasks" => nb_tasks, "nb_days" => nb_days, "time" => t))
     end
 

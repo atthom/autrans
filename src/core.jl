@@ -51,23 +51,22 @@ end
 
 
 function fitness(scheduler, schedule, verbose=false)
-    #per_worker = sum(schedule, dims=1)
-    # equity between worker in number of tasks assigned
-    #per_worker_balance = maximum(per_worker) - minimum(per_worker)
     nb_workers = length(scheduler.workers)
 
+    # equity in daily workload
     agg_all_tasks_per_day, agg_type_loss = task_per_day_loss(scheduler, schedule, nb_workers)
 
+    # equity in type task
     agg_type_loss2 = type_task_loss(scheduler, agg_all_tasks_per_day, nb_workers)
 
+    # equity in overall workload
     agg_workload_loss = workload_loss(scheduler, schedule, nb_workers)
 
     if verbose
         println("agg_type_loss=$agg_type_loss, agg_type_loss2=$agg_type_loss2, agg_workload_loss=$agg_workload_loss")
     end
 
-    #return per_worker_balance +agg_type_loss + agg_type_loss2 + agg_time_loss + agg_time_loss2
-    return agg_type_loss + agg_workload_loss + agg_type_loss2 #+ agg_shuffle_loss
+    return agg_type_loss + agg_workload_loss + agg_type_loss2 
 end
 
 
@@ -118,20 +117,6 @@ function sequence_swap(best, worker_max, worker_min, task_give, task_take)
     return best
 end
 
-function get_task_off(scheduler, worker_max, worker_min)
-    workers = scheduler.workers
-    days_off = vcat(workers[worker_max].days_off, workers[worker_min].days_off)
-    return [t for i in days_off for t in scheduler.daily_indices[i+1]]
-end
-
-function day_available(scheduler, worker_max, worker_min, day1, day2)
-    workers = scheduler.workers
-    days_off = vcat(workers[worker_max].days_off, workers[worker_min].days_off) .+ 1
-
-    return (day1 ∉ days_off) & (day2 ∉ days_off)
-end
-
-
 function check_days_off(scheduler, s)
 
     for (w_id, w) in enumerate(scheduler.workers)
@@ -141,41 +126,6 @@ function check_days_off(scheduler, s)
         end
     end
     
-end
-
-
-function permutations_seedOLD(scheduler)
-    rebalance = @chain scheduler.all_task_indices_per_day begin
-        [t.worker_slots*length(indices) for (t, indices) in _]
-        sum
-        _ / length(scheduler.workers) / scheduler.days
-        [_*length(w.days_off) for w in scheduler.workers]
-        reshape(_, 1, length(_))
-    end
-
-    nb_workers = length(scheduler.workers)
-    slots = zeros(Bool, (scheduler.total_tasks, nb_workers))
-
-    for (day_idx, indices) in enumerate(scheduler.daily_indices)
-        
-        for t in indices
-            task = get_task(scheduler, t)
-            workload = sum(slots, dims=1) 
-            if scheduler.balance_daysoff
-                workload += rebalance
-            end
-
-            workload = [(i, w) for (i, w) in enumerate(workload) if !in(day_idx-1, scheduler.workers[i].days_off)]
-
-            @chain workload begin
-                get_weights(_, task.worker_slots)
-                StatsBase.sample(workload, _, task.worker_slots, replace=false)
-                getindex.(_, 1)
-                slots[t, _] .= 1
-            end
-        end
-    end
-    slots
 end
 
 
@@ -207,26 +157,15 @@ function permutations_seed(scheduler)
             task_type_workload = reshape(task_type_correction[type_task, :], 1, nb_workers)
             workload = workload + task_type_workload // 2 
 
-            #println("task_type_workload: $task_type_workload, size(task_type_workload): $(size(task_type_workload))")
-            #println("workload: $workload, size(workload): $(size(workload))")
-
-            
             workload = [(i, w) for (i, w) in enumerate(workload) if !in(day_idx-1, scheduler.workers[i].days_off)]
             workload = sort(workload, by=x->x[2], rev=false)
-            #println("slots: $(task.worker_slots) workload: $workload")
+            
             selected_workers = getindex.(workload, 1)
             selected_workers = selected_workers[1:task.worker_slots]
             slots[t, selected_workers] .= 1
 
             task_type_correction[type_task, selected_workers] .+= 1
 
-            #show(stdout, "text/plain", task_type_correction)
-            #@chain workload begin
-            #    get_weights(_, task.worker_slots)
-            #    StatsBase.sample(workload, _, task.worker_slots, replace=false)
-            #    getindex.(_, 1)
-            #    slots[t, _] .= 1
-            #end
             daily_workload += reshape(slots[t, :], 1, nb_workers)
         end
     end
@@ -254,21 +193,10 @@ function optimize_task_per_day2(scheduler, best::Matrix{Bool})
     all_squares9 = Iterators.filter(x -> !best[x[2], x[3]] & best[x[2], x[4]], all_squares8)
 
 
-    # task1, task2, worker1, worker2, type_task1, type_task2 
     for (t1, t2, w1, w2, tp1, tp2) in all_squares9
-
-        #if w1 == 1 && w2 == 2 
-        #    println("swap $w1, $w2, $t1, $t2, $tp1, $tp2")
-        #    println("cost_matrix[tp1, w1] $(cost_matrix[tp1, w1]), cost_matrix[tp1, w2] $(cost_matrix[tp1, w2])")
-        #    println("cost_matrix[tp2, w1] $(cost_matrix[tp2, w1]), cost_matrix[tp2, w2] $(cost_matrix[tp2, w2])")
-        #    show(stdout, "text/plain", cost_matrix)
-        #    println("fitness: $(fitness(scheduler, best, true))")
-        #end
-
         if (cost_matrix[tp1, w1] == cost_matrix[tp1, w2]) || (cost_matrix[tp2, w1] == cost_matrix[tp2, w2])
             continue
         end
-
 
         best = sequence_swap(best, w1, w2, t1, t2)
         cost_matrix[tp1, w1] -= 1
@@ -281,28 +209,6 @@ function optimize_task_per_day2(scheduler, best::Matrix{Bool})
 
     return best
 end
-
-
-# BenchmarkTools.Trial: 173 samples with 1 evaluation.
-# Range (min … max):   3.214 ms … 143.372 ms  ┊ GC (min … max):  0.00% … 69.80%
-# Time  (median):     42.544 ms               ┊ GC (median):     0.00%
-# Time  (mean ± σ):   28.905 ms ±  25.128 ms  ┊ GC (mean ± σ):  16.49% ± 21.46%
-
-#  ▄█▇                    ▆█▇                                    
-#  ███▇▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▅███▅▅▁▁▁▅▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▅▁▆▅ ▅
-#  3.21 ms       Histogram: log(frequency) by time       103 ms <
-
-# Memory estimate: 6.69 MiB, allocs estimate: 32902.
-#BenchmarkTools.Trial: 1337 samples with 1 evaluation.
-# Range (min … max):  2.211 ms … 25.222 ms  ┊ GC (min … max):  0.00% … 2.90%
-# Time  (median):     3.612 ms              ┊ GC (median):    14.89%
-# Time  (mean ± σ):   3.727 ms ±  1.460 ms  ┊ GC (mean ± σ):  10.03% ± 9.16%
-
-#           ▁▄▄▃▂▃▆█▄▄▅█▇▄█▇▄ ▁                                
-#  ▂▂▂▃▃▄▅▆████████████████████▆▇▇▅▅▄▂▃▃▂▃▂▁▂▁▂▁▂▂▁▁▁▂▁▂▂▂▁▁▂ ▄
-#  2.21 ms        Histogram: frequency by time         6.4 ms <#
-#
-# Memory estimate: 5.93 MiB, allocs estimate: 29472.
 
 function optimize_permutations(scheduler)
     best = permutations_seed(scheduler)

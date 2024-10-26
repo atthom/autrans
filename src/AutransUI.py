@@ -61,7 +61,7 @@ with settings.container(border=True):
     st.divider()
 
     settings_row1 = st.columns([2, 3, 3])
-    nb_days = settings_row1[0].number_input("Number of days", value=7, help="Number of days for the planning")
+    nb_days = settings_row1[0].number_input("Number of days", value=7, help="Number of days for the planning", max_value=20)
     weekday_display = settings_row1[1].toggle("Days of the week", value=False, help="Display planning with days of the week")
     if weekday_display:
         start_with = settings_row1[2].selectbox("Start with", placeholder="Monday", 
@@ -84,7 +84,7 @@ with settings.container(border=True):
     task_row[0].header("Tasks")
 
     task_row1 = st.columns([2, 2, 2])
-    number_of_tasks = task_row1[0].number_input("Number of tasks", value=3, key="number_of_tasks", min_value=1, max_value=10,
+    number_of_tasks = task_row1[0].number_input("Number of tasks", value=3, key="number_of_tasks", min_value=1, max_value=20,
                                                 help="Number of different type of task in the Schedule")
     cutoff_first = task_row1[1].number_input("Delete firsts tasks", value=1, min_value=0,
                                              help="Remove the firsts tasks at the beginning of the Schedule")
@@ -109,7 +109,7 @@ with settings.container(border=True):
     worker_row[0].header("Workers")
 
     worker_row1 = st.columns([2, 2, 2], vertical_alignment="center")
-    nb_workers = worker_row1[0].number_input("Number of people", value=4,
+    nb_workers = worker_row1[0].number_input("Number of people", value=4, max_value=100,
                                             help="Total number of people that will perform tasks")
     with_days_off = worker_row1[1].toggle("Add days off", value=False,
                                           help="Include holidays")
