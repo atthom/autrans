@@ -84,7 +84,7 @@ with settings.container(border=True):
     task_row[0].header("Tasks")
 
     task_row1 = st.columns([2, 2, 2])
-    number_of_tasks = task_row1[0].number_input("Number of tasks", value=3, key="number_of_tasks", min_value=1, max_value=20,
+    number_of_tasks = task_row1[0].number_input("Number of tasks", value=3, key="number_of_tasks", min_value=1, max_value=10,
                                                 help="Number of different type of task in the Schedule")
     cutoff_first = task_row1[1].number_input("Delete firsts tasks", value=1, min_value=0,
                                              help="Remove the firsts tasks at the beginning of the Schedule")
@@ -109,7 +109,7 @@ with settings.container(border=True):
     worker_row[0].header("Workers")
 
     worker_row1 = st.columns([2, 2, 2], vertical_alignment="center")
-    nb_workers = worker_row1[0].number_input("Number of people", value=4, max_value=100,
+    nb_workers = worker_row1[0].number_input("Number of people", value=4, max_value=20,
                                             help="Total number of people that will perform tasks")
     with_days_off = worker_row1[1].toggle("Add days off", value=False,
                                           help="Include holidays")
@@ -144,11 +144,8 @@ with settings.container(border=True):
 
  
 with tables:
-    
     schedule_display = make_table("Schedule", ["Tasks"] + selected_days)
-    
     task_agg = make_table("Affectation per day", ["Days"] + workers)
-
     task_per_day_agg = make_table("Affectation per task", ["Tasks"] + workers)
 
 
@@ -186,9 +183,6 @@ if submit:
             else:
                 set_df(layout, all_agg[agg])
     else:
-        print("NO", sat_agg)
-
         sat_schedule(sat_agg["msg"])
-    t_total = round(time.time() - t, 2)
-    print(t_sat, t_schedule, t_total)
+        
         

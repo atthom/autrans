@@ -8,7 +8,6 @@ using DataStructures
 using StatsBase
 using HTTP
 using Oxygen
-using Plots
 
 include("structures.jl")
 include("core.jl")
