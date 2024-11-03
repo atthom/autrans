@@ -71,8 +71,9 @@ end
     return payload_back
 end
 
+staticfiles("content", "static")
 
-#serve()
+serve()
 
 
 end
