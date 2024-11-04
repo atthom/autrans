@@ -4,6 +4,9 @@ import pandas as pd
 import numpy as np
 import requests
 
+
+st.set_page_config(page_title="Autrans", page_icon="🧊", layout="wide")
+
 if True:
     st.html(
 """
@@ -39,7 +42,6 @@ def make_table(title, cols):
     row2 = st.columns([10])
     return row2[0].dataframe(pd.DataFrame(columns=cols), hide_index=True, use_container_width=True)
 
-st.set_page_config(page_title="Autrans", page_icon="🧊", layout="wide")
 
 if False:
     st.markdown("""
@@ -199,7 +201,7 @@ if submit:
 
 if True:
     st.html(
-"""
+    """
 <!-- Google Tag Manager (noscript) -->
 <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-5TZ38RNJ"
 height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>

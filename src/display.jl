@@ -1,6 +1,4 @@
 
-using Chain
-
 function agg_jobs(scheduler::Scheduler, schedule)
     tasks_agg = DataFrame(Tasks=[t.name for t in scheduler.task_per_day])
     nb_jobs = length(scheduler.task_per_day)
