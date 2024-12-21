@@ -32,7 +32,7 @@ end
 
 function agg_time(scheduler::Scheduler, schedule)
     names = [w.name for w in scheduler.workers]
-    days = DataFrame(Days=["Jour $i" for i in 1:scheduler.days])
+    days = DataFrame(Days=["Day $i" for i in 1:scheduler.days])
 
     @chain scheduler.daily_indices begin
         [sum(schedule[day, :], dims=1) for day in _]
@@ -59,7 +59,7 @@ function agg_display(scheduler::Scheduler, schedule)
                 daily_task = daily_task[1]
                 w_ids = findall(x -> x==1, schedule[daily_task, :])
                 w_names = [scheduler.workers[i].name for i in w_ids]
-                w_names = join(w_names, ", ", " et ")
+                w_names = join(w_names, ", ", " and ")
             else
                 w_names = ""
             end

@@ -68,7 +68,7 @@ function check_satisfability(scheduler::Scheduler; cutoff_workers=30, cutoff_tas
 
         for t in required_workers
             if t.worker_slots > daily_worker
-                return false, "Not enough worker for task $(t.name) on day $idx_day"
+                return false, "Not enough workers for task $(t.name) on day $idx_day"
             end
         end
     end

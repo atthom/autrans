@@ -1,30 +1,84 @@
 <!DOCTYPE html>
 
 <html lang="en">
+
 <head>
-<meta charset="utf-8"/>
-<meta content="width=device-width,initial-scale=1,shrink-to-fit=no" name="viewport"/>
-<link href="./favicon.png" rel="shortcut icon"/>
-<link as="font" crossorigin="" href="./static/media/SourceSansPro-Regular.0d69e5ff5e92ac64a0c9.woff2" rel="preload" type="font/woff2"/>
-<link as="font" crossorigin="" href="./static/media/SourceSansPro-SemiBold.abed79cd0df1827e18cf.woff2" rel="preload" type="font/woff2"/>
-<link as="font" crossorigin="" href="./static/media/SourceSansPro-Bold.118dea98980e20a81ced.woff2" rel="preload" type="font/woff2"/>
-<title>Streamlit</title>
-<script>window.prerenderReady = !1</script>
-<script defer="defer" src="./static/js/main.33cac65c.js"></script>
-<link href="./static/css/main.5513bd04.css" rel="stylesheet"/>
-<!-- Google Tag Manager -->
-<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-    })(window,document,'script','dataLayer','GTM-5TZ38RNJ');</script>
-<!-- End Google Tag Manager -->
-<meta content="Autrans is a simple scheduling tool that helps users easily create their plans." name="description"/><meta content="website" property="og:type"/><meta content="https://autrans.tjalabert.fr" property="og:url"/><meta content="Autrans - Scheduling Tool" property="og:title"/><meta content="Autrans is a simple scheduling tool that helps users create their weekly planning." property="og:description"/><meta content="https://autrans.tjalabert.fr" name="twitter:url"/><meta content="Autrans - Scheduling Tool" name="twitter:title"/><meta content="Autrans is a simple scheduling tool that helps users create their weekly planning." name="twitter:description"/><meta content="Autrans - Scheduling Tool" name="linkedin:title"/><meta content="Autrans is a simple scheduling tool that helps users create their weekly planning." name="linkedin:description"/><meta content="scheduling, tool, Autrans, planning, plan, schedule" name="keywords"/><meta content="Autrans is a simple scheduling tool that helps users easily create their plans." name="description"/><meta content="website" property="og:type"/><meta content="https://autrans.tjalabert.fr" property="og:url"/><meta content="Autrans - Scheduling Tool" property="og:title"/><meta content="Autrans is a simple scheduling tool that helps users create their weekly planning." property="og:description"/><meta content="https://autrans.tjalabert.fr" name="twitter:url"/><meta content="Autrans - Scheduling Tool" name="twitter:title"/><meta content="Autrans is a simple scheduling tool that helps users create their weekly planning." name="twitter:description"/><meta content="Autrans - Scheduling Tool" name="linkedin:title"/><meta content="Autrans is a simple scheduling tool that helps users create their weekly planning." name="linkedin:description"/><meta content="scheduling, tool, Autrans, planning, plan, schedule" name="keywords"/><meta content="Autrans is a simple scheduling tool that helps users easily create their plans." name="description"/><meta content="website" property="og:type"/><meta content="https://autrans.tjalabert.fr" property="og:url"/><meta content="Autrans - Scheduling Tool" property="og:title"/><meta content="Autrans is a simple scheduling tool that helps users create their weekly planning." property="og:description"/><meta content="https://autrans.tjalabert.fr" name="twitter:url"/><meta content="Autrans - Scheduling Tool" name="twitter:title"/><meta content="Autrans is a simple scheduling tool that helps users create their weekly planning." name="twitter:description"/><meta content="Autrans - Scheduling Tool" name="linkedin:title"/><meta content="Autrans is a simple scheduling tool that helps users create their weekly planning." name="linkedin:description"/><meta content="scheduling, tool, Autrans, planning, plan, schedule" name="keywords"/></head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width,initial-scale=1,shrink-to-fit=no" name="viewport" />
+    <link href="./favicon.png" rel="shortcut icon" />
+    <link as="font" crossorigin="" href="./static/media/SourceSansPro-Regular.0d69e5ff5e92ac64a0c9.woff2" rel="preload"
+        type="font/woff2" />
+    <link as="font" crossorigin="" href="./static/media/SourceSansPro-SemiBold.abed79cd0df1827e18cf.woff2" rel="preload"
+        type="font/woff2" />
+    <link as="font" crossorigin="" href="./static/media/SourceSansPro-Bold.118dea98980e20a81ced.woff2" rel="preload"
+        type="font/woff2" />
+    <title>Autrans, a simple scheduling tool that helps users create their weekly planning</title>
+    <script>window.prerenderReady = !1</script>
+    <script defer="defer" src="./static/js/main.33cac65c.js"></script>
+    <link href="./static/css/main.5513bd04.css" rel="stylesheet" />
+    <!-- Google Tag Manager -->
+    <script>(function (w, d, s, l, i) {
+                    w[l] = w[l] || []; w[l].push({
+                        'gtm.start':
+                            new Date().getTime(), event: 'gtm.js'
+                    }); var f = d.getElementsByTagName(s)[0],
+                        j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+                            'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+                })(window, document, 'script', 'dataLayer', 'GTM-5TZ38RNJ');</script>
+    <!-- End Google Tag Manager -->
+    <meta content="Autrans is a simple scheduling tool that helps users easily create their plans."
+        name="description" />
+    <meta content="website" property="og:type" />
+    <meta content="https://autrans.tjalabert.fr" property="og:url" />
+    <meta content="Autrans - Scheduling Tool" property="og:title" />
+    <meta content="Autrans is a simple scheduling tool that helps users create their weekly planning."
+        property="og:description" />
+    <meta content="https://autrans.tjalabert.fr" name="twitter:url" />
+    <meta content="Autrans - Scheduling Tool" name="twitter:title" />
+    <meta content="Autrans is a simple scheduling tool that helps users create their weekly planning."
+        name="twitter:description" />
+    <meta content="Autrans - Scheduling Tool" name="linkedin:title" />
+    <meta content="Autrans is a simple scheduling tool that helps users create their weekly planning."
+        name="linkedin:description" />
+    <meta content="scheduling, tool, Autrans, planning, plan, schedule" name="keywords" />
+    <meta content="Autrans is a simple scheduling tool that helps users easily create their plans."
+        name="description" />
+    <meta content="website" property="og:type" />
+    <meta content="https://autrans.tjalabert.fr" property="og:url" />
+    <meta content="Autrans - Scheduling Tool" property="og:title" />
+    <meta content="Autrans is a simple scheduling tool that helps users create their weekly planning."
+        property="og:description" />
+    <meta content="https://autrans.tjalabert.fr" name="twitter:url" />
+    <meta content="Autrans - Scheduling Tool" name="twitter:title" />
+    <meta content="Autrans is a simple scheduling tool that helps users create their weekly planning."
+        name="twitter:description" />
+    <meta content="Autrans - Scheduling Tool" name="linkedin:title" />
+    <meta content="Autrans is a simple scheduling tool that helps users create their weekly planning."
+        name="linkedin:description" />
+    <meta content="scheduling, tool, Autrans, planning, plan, schedule" name="keywords" />
+    <meta content="Autrans is a simple scheduling tool that helps users easily create their plans."
+        name="description" />
+    <meta content="website" property="og:type" />
+    <meta content="https://autrans.tjalabert.fr" property="og:url" />
+    <meta content="Autrans - Scheduling Tool" property="og:title" />
+    <meta content="Autrans is a simple scheduling tool that helps users create their weekly planning."
+        property="og:description" />
+    <meta content="https://autrans.tjalabert.fr" name="twitter:url" />
+    <meta content="Autrans - Scheduling Tool" name="twitter:title" />
+    <meta content="Autrans is a simple scheduling tool that helps users create their weekly planning."
+        name="twitter:description" />
+    <meta content="Autrans - Scheduling Tool" name="linkedin:title" />
+    <meta content="Autrans is a simple scheduling tool that helps users create their weekly planning."
+        name="linkedin:description" />
+    <meta content="scheduling, tool, Autrans, planning, plan, schedule" name="keywords" />
+</head>
+
 <body>
-<!-- Google Tag Manager (noscript) -->
-<noscript><iframe height="0" src="https://www.googletagmanager.com/ns.html?id=GTM-5TZ38RNJ" style="display:none;visibility:hidden" width="0"></iframe></noscript>
-<!-- End Google Tag Manager (noscript) -->
-<noscript>You need to enable JavaScript to run this app.</noscript>
-<div id="root"></div>
+    <!-- Google Tag Manager (noscript) -->
+    <noscript><iframe height="0" src="https://www.googletagmanager.com/ns.html?id=GTM-5TZ38RNJ"
+            style="display:none;visibility:hidden" width="0"></iframe></noscript>
+    <!-- End Google Tag Manager (noscript) -->
+    <div id="root"></div>
 </body>
+
 </html>
