@@ -153,11 +153,27 @@ function benchmark2()
     for (i, d) in enumerate(scheduler.daily_indices)
         agg_all_days[i, :] = sum(best[d, :], dims=1)
     end
-
     
     @profview [Autrans.optimize_permutations(scheduler) for i in 1:10]
-
 end
+
+function new_playload()
+    nb_days, nb_tasks = 10, 10
+    nb_workers = 10
+
+    payload = Dict(
+        "workers" => [("Worker $i_worker", Int[]) for i_worker in 1:nb_workers],
+        "tasks"=> [("Task $i_task", 2, 1, 1, nb_days) for i_task in 1:nb_tasks],
+        "task_per_day"=> 0:nb_tasks-1 |> collect,
+        "days" => nb_days, 
+        "balance_daysoff" => false
+    )
+
+    Autrans.Scheduler(payload)
+    
+end
+
+
 function benchmark_scheduler()
 
     all_results = []

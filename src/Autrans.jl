@@ -17,11 +17,9 @@ export serve
 
 struct SchedulePayload
     workers::Vector{Tuple{String, Vector{Int}}}
-    tasks::Vector{Tuple{String, Int, Int}}
+    tasks::Vector{Tuple{String, Int, Int, Int, Int}}
     task_per_day::Vector{String}
     nb_days::Int
-    cutoff_first::Int
-    cutoff_last::Int
     balance_daysoff::Bool
 end
 
@@ -34,8 +32,6 @@ function process_payload(req::HTTP.Request)
         "tasks"=> schedule_payload.tasks,
         "task_per_day" => [task_id[t] for t in schedule_payload.task_per_day], 
         "days" => schedule_payload.nb_days, 
-        "cutoff_N_first"=> schedule_payload.cutoff_first,
-        "cutoff_N_last" => schedule_payload.cutoff_last,
         "balance_daysoff" => schedule_payload.balance_daysoff
     )
 
@@ -73,7 +69,7 @@ end
 
 staticfiles("content", "static")
 
-serve()
+#serve()
 
 
 end

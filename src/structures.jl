@@ -10,20 +10,20 @@ struct STask
     name::String
     worker_slots::Int
     difficulty::Int
+    range::Tuple{Int, Int}
 end
 
-STask(tp::Tuple{String, Int, Int}) = STask(tp[1], tp[2], tp[3])
-STask(tp::Tuple{String, Int}) = STask(tp[1], tp[2], 1)
-STask(a::String, b::Int) = STask(a, b, 1)
+STask(tp::Tuple{String, Int, Int, Int, Int}) = STask(tp[1], tp[2], tp[3], (tp[4], tp[5]))
+STask(tp::Tuple{String, Int, Int, Int}) = STask(tp[1], tp[2], 1, (tp[4], tp[5]))
 
 struct Scheduler
     workers::Vector{SWorker}
     task_per_day::Vector{STask}
     days::Int
     total_tasks::Int
-    cutoff_N_first::Int
-    cutoff_N_last::Int
-    all_task_indices_per_day::Vector{Tuple{STask, Vector{Int}}}
+    #cutoff_N_first::Int
+    #cutoff_N_last::Int
+    all_task_indices_per_day::Vector{Pair{STask, Vector{Int}}}
     task_type_indices::Vector{Vector{Int}}
     daily_indices::Vector{Vector{Int}}
     balance_daysoff::Bool
@@ -33,13 +33,14 @@ function Scheduler(payload::Dict)
     workers = SWorker.(payload["workers"])
     tasks = STask.(payload["tasks"])
 
-    balance_daysoff = payload["balance_daysoff"]
+    balance_daysoff, days = payload["balance_daysoff"], payload["days"]
 
-    N_first, N_last, days = payload["cutoff_N_first"], payload["cutoff_N_last"], payload["days"]
+    #N_first, N_last, days = payload["cutoff_N_first"], payload["cutoff_N_last"], payload["days"]
     task_per_day = [tasks[i] for i in payload["task_per_day"] .+ 1]
-    total_task = length(task_per_day)*days - N_first - N_last
 
-    all_task_indices_per_day = task_indices(task_per_day, days, N_first, N_last)
+    total_task = sum(t.range[2] - t.range[1] for t in task_per_day)
+
+    all_task_indices_per_day = task_indices(task_per_day, days)
 
     unique_tasks = unique(task_per_day)
     task_type = [[idx for (idx, (t2, task_indices)) in 
@@ -47,9 +48,9 @@ function Scheduler(payload::Dict)
                 if t1 == t2 && length(task_indices[2]) > 0] 
                 for t1 in unique_tasks]
 
-    daily = daily_indices(task_per_day, days, N_first, N_last)
+    daily = daily_indices(task_per_day, days)
     
-    return Scheduler(workers, task_per_day, days, total_task, N_first, N_last, all_task_indices_per_day, task_type, daily, balance_daysoff)
+    return Scheduler(workers, task_per_day, days, total_task, all_task_indices_per_day, task_type, daily, balance_daysoff)
 end
 
 
@@ -116,23 +117,20 @@ function difficulty(s::Scheduler)
 end
 
 
-function task_indices(task_per_day::Vector{STask}, days::Int, cutoff_N_first::Int, cutoff_N_last::Int)
-    all_indices = Vector{Tuple{STask, Vector{Int}}}()
-    nb_task_per_day = length(task_per_day)
+function task_indices(task_per_day::Vector{STask}, days::Int)
+    all_indices = OrderedDict{STask, Vector{Int}}(t => [] for t in task_per_day)
     
-    max_task = length(task_per_day)*days - cutoff_N_last
-
-    base_indice = 0:days-1 |> collect 
-    base_indice = base_indice .* nb_task_per_day
-
-    for (idx, task) in enumerate(task_per_day)
-        current_indices = base_indice .+ idx
-        current_indices = [i for i in current_indices if cutoff_N_first < i <= max_task]
-        current_indices = current_indices .- cutoff_N_first
-
-        push!(all_indices, (task, current_indices))
+    current_ids = 0
+    for day in 1:days
+        for task in task_per_day
+            if task.range[1] <= day <= task.range[2]
+                current_ids += 1
+                push!(all_indices[task], current_ids)
+            end
+        end
     end
-    return all_indices
+
+    return collect(all_indices)
 end
 
 
@@ -150,17 +148,18 @@ function task_type_indices(all_task_indices_per_day)
     return all_indices
 end
 
-function daily_indices(task_per_day::Vector{STask}, days::Int, cutoff_N_first::Int, cutoff_N_last::Int)
-    all_indices = Vector{Vector{Int64}}()
-    nb_jobs = length(task_per_day)
-    offset = cutoff_N_first
-
-    max_task = nb_jobs*days - cutoff_N_last
+function daily_indices(task_per_day::Vector{Autrans.STask}, days::Int)
+    all_indices = Vector{Vector{Int64}}([] for d in 1:days)
     
-    for day in 0:days-1
-        current_day = [i + (nb_jobs*day) for i in 1:nb_jobs if offset < i + (nb_jobs*day) <= max_task]
-        current_day = current_day .- offset
-        push!(all_indices, current_day)
+    current_ids = 0
+    for day in 1:days
+        for task in task_per_day
+            if task.range[1] <= day <= task.range[2]
+                current_ids += 1
+                push!(all_indices[day], current_ids)
+            end
+        end
     end
+
     return all_indices
 end
