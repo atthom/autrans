@@ -1,100 +1,117 @@
+using Revise 
 using Test
 using Autrans
 
-function quick_test(days, n1, n2, workers, shouldbe; N_first::Int=0, N_last::Int=0)
-    schedule = SmallSchedule(days, n1, n2, workers, N_first, N_last)
-    schedule, searchspace = search_space(schedule)
-    result = optimize(schedule, searchspace)
-    #@info result, schedule, searchspace, fitness(result, schedule)
-    @test fitness(result, schedule) <= shouldbe
-end
-
-function test_cardinality(days, n1, n2, workers, shouldbe)
-    schedule = SmallSchedule(days, n1, n2, workers)
-    c = cardinality(schedule)
-    @test c == shouldbe
+function make_simple_payload(nb_days, nb_tasks, nb_workers, nb_worker_per_task)
+    return Dict(
+        "workers" => [("Worker $i_worker", Int[]) for i_worker in 1:nb_workers],
+        "tasks"=> [("Task $i_task", nb_worker_per_task, 1, 1, nb_days) for i_task in 1:nb_tasks],
+        "task_per_day"=> 0:nb_tasks-1 |> collect,
+        "days" => nb_days, 
+        "balance_daysoff" => false
+    )
 end
 
 
+function make_complex_payload(nb_days_worker, nb_tasks, nb_worker_per_task, balance_daysoff)
+    tasks = [("Task 1", nb_worker_per_task, 1, 2, nb_days_worker)]
+    tasks = vcat([("Task  $i_task", nb_worker_per_task, 1, 1, nb_days_worker) for i_task in 2:nb_tasks-1]..., tasks)
+    tasks = push!(tasks, ("Task $nb_tasks", nb_worker_per_task, 1, 1, nb_days_worker - 1))
+    return Dict(
+        "workers" => [("Worker $i_worker", [i_worker]) for i_worker in 1:nb_days_worker],
+        "tasks" => tasks,
+        "task_per_day" => 0:nb_tasks-1 |> collect,
+        "days" => nb_days_worker, 
+        "balance_daysoff" => balance_daysoff
+    )
+end
 
-function test_true()
-    workers =  ["Chronos","Jon", "Beurre","Fishy","Bendo","Alicia","Poulpy","Curt","LeRat","Bizard"]
-    schedule = SmallSchedule(5, 5, 2, workers, 1, 1)
-    schedule, searchspace = search_space(schedule)
-    result = optimize(schedule, searchspace)
+function seed_opti(payload)
+    scheduler = Scheduler(payload)
+    @test check_satisfability(scheduler) == (true, "OK")
+    seed = permutations_seed(scheduler)
+    res = optimize_permutations(scheduler)
+    return scheduler, seed, res
+end
+
+    @testset "impossible_payload" begin
+        payload = make_simple_payload(10, 10, 1, 2)
+        scheduler = Scheduler(payload)
+        @test check_satisfability(scheduler) == (false, "Not enough worker for task Task 1 on day 1")
+    end
+
+
+    @testset "perfect_payload" begin
+        payload = make_simple_payload(10, 10, 2, 1)
+        scheduler, seed, res = seed_opti(payload)
+        @test fitness(scheduler, seed)  == fitness(scheduler, res) == 0
+        payload = make_simple_payload(10, 10, 2, 2)
+        scheduler, seed, res = seed_opti(payload)
+        @test fitness(scheduler, seed) == fitness(scheduler, res) == 0
+
+        payload = make_simple_payload(3, 2, 3, 1)
+        scheduler, seed, res = seed_opti(payload)
+        @test fitness(scheduler, res) == fitness(scheduler, seed) == 3
+
+        payload = make_simple_payload(2, 2, 2, 1)
+        scheduler, seed, res = seed_opti(payload)
+        @test fitness(scheduler, res) == fitness(scheduler, seed) == 0
+        
+        payload = make_simple_payload(4, 2, 4, 1)
+        scheduler, seed, res = seed_opti(payload)
+        @test fitness(scheduler, res) == fitness(scheduler, seed) == 4
+
+        payload = make_simple_payload(4, 2, 4, 2)
+        scheduler, seed, res = seed_opti(payload)
+        @test fitness(scheduler, res) == fitness(scheduler, seed) == 0
+
+        payload = make_simple_payload(2, 2, 2, 1)
+        scheduler, seed, res = seed_opti(payload)
+        @test fitness(scheduler, res) == fitness(scheduler, seed) == 0
+
+        payload = make_simple_payload(3, 3, 3, 1)
+        scheduler, seed, res = seed_opti(payload)
+        @test fitness(scheduler, res) == fitness(scheduler, seed) == 0
+    end
+
+@testset "inexact_payload" begin
+
+    payload = make_simple_payload(5, 5, 5, 2)
+    scheduler, seed, res = seed_opti(payload)
+    @test fitness(scheduler, res) <= fitness(scheduler, seed) 
+    @test fitness(scheduler, res) == 0
     
-    df = Autrans.make_df(schedule, result)
-    println(df)
+    payload = make_simple_payload(3, 3, 3, 2)
+    scheduler, seed, res = seed_opti(payload)
+    @test fitness(scheduler, res) <= fitness(scheduler, seed) 
+    @test fitness(scheduler, res) == 0
+    #display(scheduler, seed)
+
 end
 
+@testset "complex_payload" begin
 
-function test_new_format()
-    workers =  ["Chronos","Jon", "Beurre","Fishy","Bendo","Alicia","Poulpy","Curt","LeRat","Bizard"]
-    days_off = repeat([Int[]], length(workers)-1)
-    push!(days_off, [6, 7])
-    v = Task("Vaiselle", 2)
-    r = Task("Repas", 2)
-    task_per_day = [v, r, v, r, v]
-    days = 7
-    cutoff_N_first = 1
-    cutoff_N_last = 1
-    scheduler = Scheduler(zip(workers, days_off), task_per_day, days, cutoff_N_first, cutoff_N_last)
+    payload = make_complex_payload(5, 5, 2, false)
+    scheduler, seed, res = seed_opti(payload)
+    @test fitness(scheduler, res) <= fitness(scheduler, seed) 
+    @test fitness(scheduler, res) == 13
+    display(scheduler, res)
+    
+    payload = make_complex_payload(10, 10, 2, false)
+    scheduler, seed, res = seed_opti(payload)
+    @test fitness(scheduler, res) <= fitness(scheduler, seed) 
 
-    return scheduler
+    
+    payload = make_simple_payload(6, 3, 3, 2)
+    payload["workers"][2] = ("Worker 2",  [2, 3, 4])
+    scheduler, seed, res = seed_opti(payload)
+    @test fitness(scheduler, res) <= fitness(scheduler, seed) 
+    @test fitness(scheduler, res) == 112
+    
+    payload["balance_daysoff"] = true
+    scheduler, seed, res = seed_opti(payload)
+    @test fitness(scheduler, res) <= fitness(scheduler, seed) 
+    
+
+
 end
-
-@testset "test_exact" begin
-    return
-    quick_test(7, 2, 2,  ["Cookie", "Fish"], 0)
-    quick_test(7, 1, 1,  ["Cookie"], 0)
-    quick_test(7, 2, 1,  ["Cookie", "Fish"], 0)
-    quick_test(7, 1, 2,  ["Cookie", "Fish"], 0)
-    quick_test(7, 4, 1,  ["Cookie", "Fish"], 0)
-    quick_test(7, 1, 1,  ["W$i" for i in 1:7], 0)
-    quick_test(7, 1, 2,  ["W$i" for i in 1:7], 0)
-    quick_test(7, 2, 1,  ["W$i" for i in 1:7], 0)
-end
-
-@testset "test_inexact" begin
-    return 
-    quick_test(7, 2, 1,  ["W$i" for i in 1:14], 12)
-    quick_test(7, 1, 2,  ["W$i" for i in 1:14], 12)
-    quick_test(7, 13, 3,  ["W$i" for i in 1:7], 12)
-    quick_test(7, 3, 13,  ["W$i" for i in 1:14], 80)
-    quick_test(7, 1, 1,  ["Cookie", "Fish"], 5)
-end
-
-@testset "test_impossible" begin
-    return
-    test_cardinality(7, 1, 2,  ["Cookie"], 0)
-    test_cardinality(7, 1, 4,  ["Cookie", "Fish"], 0)
-end
-
-@testset "test_single_solution" begin
-    return
-    test_cardinality(7, 2, 2,  ["Cookie", "Fish"], 1)
-    test_cardinality(7, 1, 1,  ["Cookie"], 1)
-    test_cardinality(7, 1, 2,  ["Cookie", "Fish"], 1)
-end
-
-@testset "test_inexact_with_cutoff" begin
-    return
-    quick_test(7, 2, 1,  ["W$i" for i in 1:14], 12; N_first=1, N_last=3)
-
-    df = find_schedule(7, 2, 1,  ["W$i" for i in 1:14], 1, 3)
-    df = find_schedule(1, 2, 1,  ["W$i" for i in 1:14], 1, 3)
-    #@info df
-end
-
-@testset "test_new_format" begin
-    workers =  ["Chronos","Jon", "Beurre","Fishy","Bendo","Alicia","Poulpy","Curt","LeRat","Bizard"]
-    days_off = repeat([Int[]], length(workers))
-    v = Task("Vaiselle", 2)
-    r = Task("Repas", 2)
-    task_per_day = [v, r, v, r, v]
-    days = 7
-    cutoff_N_first = 1
-    cutoff_N_last = 1
-    scheduler = Scheduler(zip(workers, days_off), task_per_day, days, cutoff_N_first, cutoff_N_last)
-end
-
