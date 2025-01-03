@@ -8,12 +8,14 @@ using DataStructures
 using StatsBase
 using HTTP
 using Oxygen
+using OrderedCollections
 
 include("structures.jl")
 include("core.jl")
 include("display.jl")
 
-export serve
+export serve, STask, SWorker, Scheduler, fitness, display
+export permutations_seed, optimize_permutations, check_satisfability
 
 struct SchedulePayload
     workers::Vector{Tuple{String, Vector{Int}}}

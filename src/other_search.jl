@@ -169,7 +169,9 @@ function new_playload()
         "balance_daysoff" => false
     )
 
-    Autrans.Scheduler(payload)
+    scheduler = Scheduler(payload)
+
+    s = Autrans.permutation_seed(scheduler)
     
 end
 

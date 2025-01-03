@@ -18,12 +18,11 @@ STask(tp::Tuple{String, Int, Int, Int}) = STask(tp[1], tp[2], 1, (tp[4], tp[5]))
 
 struct Scheduler
     workers::Vector{SWorker}
-    task_per_day::Vector{STask}
+    tasks_per_day::Vector{STask}
     days::Int
     total_tasks::Int
-    #cutoff_N_first::Int
-    #cutoff_N_last::Int
-    all_task_indices_per_day::Vector{Pair{STask, Vector{Int}}}
+    tasks_indices_per_day::Vector{Pair{STask, Vector{Int}}}
+    indice_task::Dict{Int, STask}
     task_type_indices::Vector{Vector{Int}}
     daily_indices::Vector{Vector{Int}}
     balance_daysoff::Bool
@@ -36,28 +35,27 @@ function Scheduler(payload::Dict)
     balance_daysoff, days = payload["balance_daysoff"], payload["days"]
 
     #N_first, N_last, days = payload["cutoff_N_first"], payload["cutoff_N_last"], payload["days"]
-    task_per_day = [tasks[i] for i in payload["task_per_day"] .+ 1]
+    tasks_per_day = [tasks[i] for i in payload["task_per_day"] .+ 1]
 
-    total_task = sum(t.range[2] - t.range[1] for t in task_per_day)
+    total_task = sum(t.range[2] - t.range[1] + 1 for t in tasks_per_day)
 
-    all_task_indices_per_day = task_indices(task_per_day, days)
+    tasks_indices_per_day, daily, indice_task = task_indices(tasks_per_day, days)
 
-    unique_tasks = unique(task_per_day)
+    unique_tasks = unique(tasks_per_day)
     task_type = [[idx for (idx, (t2, task_indices)) in 
-                enumerate(zip(task_per_day, all_task_indices_per_day)) 
+                enumerate(zip(tasks_per_day, tasks_indices_per_day)) 
                 if t1 == t2 && length(task_indices[2]) > 0] 
                 for t1 in unique_tasks]
 
-    daily = daily_indices(task_per_day, days)
     
-    return Scheduler(workers, task_per_day, days, total_task, all_task_indices_per_day, task_type, daily, balance_daysoff)
+    return Scheduler(workers, tasks_per_day, days, total_task, tasks_indices_per_day, indice_task, task_type, daily, balance_daysoff)
 end
 
 
 function check_satisfability(scheduler::Scheduler; cutoff_workers=30, cutoff_tasks=20, cutoff_days=40)
     if length(scheduler.workers) > cutoff_workers
         return false, "Too many workers ($cutoff_workers max)"
-    elseif length(scheduler.task_per_day) > cutoff_tasks
+    elseif length(scheduler.tasks_per_day) > cutoff_tasks
         return false, "Too many tasks ($cutoff_tasks max)"
     elseif scheduler.days > cutoff_days
         return false, "Too many days ($cutoff_days max)"
@@ -77,48 +75,12 @@ function check_satisfability(scheduler::Scheduler; cutoff_workers=30, cutoff_tas
     return true, "OK"
 end
 
-function get_task(s::Scheduler, id::Int)
-    task_id = (id + s.cutoff_N_first) % length(s.task_per_day)
-    if task_id == 0
-        return s.task_per_day[end]
-    else
-        return s.task_per_day[task_id]
-    end
-end
-
-function seed(s::Scheduler)
-    nb_workers = length(s.workers)
-    slots = zeros(Bool, (s.total_tasks, nb_workers))
-    for (day_idx, indices) in enumerate(s.daily_indices)
-        worker_working = [w for w in 1:nb_workers if !in(day_idx-1, s.workers[w].days_off)]
-        
-        for t in indices
-            task = get_task(s, t)
-            random_affectation = StatsBase.sample(worker_working, task.worker_slots, replace=false)
-            slots[t, random_affectation] .= 1
-        end
-    end
-    return slots
-end
-
-function difficulty(s::Scheduler)
-    nb_workers = length(s.workers)
-    possible_states = 1
-
-    for (day_idx, indices) in enumerate(s.daily_indices)
-        worker_working = [w for w in 1:nb_workers if !in(day_idx-1, s.workers[w].days_off)]
-        
-        for t in indices
-            task = get_task(s, t)
-            possible_states *= binomial(length(worker_working), task.worker_slots)
-        end
-    end
-    return possible_states
-end
-
+get_task(s::Scheduler, id::Int) = s.indice_task[id]
 
 function task_indices(task_per_day::Vector{STask}, days::Int)
     all_indices = OrderedDict{STask, Vector{Int}}(t => [] for t in task_per_day)
+    daily_indices = [Int[] for i in 1:days]
+    idx_tasks = Dict{Int, STask}()
     
     current_ids = 0
     for day in 1:days
@@ -126,40 +88,11 @@ function task_indices(task_per_day::Vector{STask}, days::Int)
             if task.range[1] <= day <= task.range[2]
                 current_ids += 1
                 push!(all_indices[task], current_ids)
+                push!(daily_indices[day], current_ids)
+                push!(idx_tasks, current_ids => task)
             end
         end
     end
 
-    return collect(all_indices)
-end
-
-
-function task_type_indices(all_task_indices_per_day)
-    unique_tasks = unique([t for (t, i) in all_task_indices_per_day])
-    all_indices = [(t, Int[]) for t in unique_tasks]
-
-    for (t, indices) in all_indices
-        for (t2, idx) in all_task_indices_per_day
-            if t == t2
-                push!(indices, idx...)
-            end
-        end
-    end
-    return all_indices
-end
-
-function daily_indices(task_per_day::Vector{Autrans.STask}, days::Int)
-    all_indices = Vector{Vector{Int64}}([] for d in 1:days)
-    
-    current_ids = 0
-    for day in 1:days
-        for task in task_per_day
-            if task.range[1] <= day <= task.range[2]
-                current_ids += 1
-                push!(all_indices[day], current_ids)
-            end
-        end
-    end
-
-    return all_indices
+    return collect(all_indices), daily_indices, idx_tasks
 end

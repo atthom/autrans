@@ -20,19 +20,19 @@ end
 
 function task_per_day_loss(scheduler, schedule, nb_worker)
     # equity between worker in type of task assigned
-    agg_all_tasks_per_day = zeros(Int, (length(scheduler.all_task_indices_per_day), nb_worker))
+    agg_tasks_per_day = zeros(Int, (length(scheduler.tasks_indices_per_day), nb_worker))
     
-    for (id_t, (t, indices)) in enumerate(scheduler.all_task_indices_per_day)
-        agg_all_tasks_per_day[id_t, :] = sum(schedule[indices, :], dims=1)
+    for (id_t, (t, indices)) in enumerate(scheduler.tasks_indices_per_day)
+        agg_tasks_per_day[id_t, :] = sum(schedule[indices, :], dims=1)
     end
     
-    return agg_all_tasks_per_day, mse(agg_all_tasks_per_day)
+    return agg_tasks_per_day, mse(agg_tasks_per_day)
 end
 
-function type_task_loss(scheduler, agg_all_tasks_per_day, nb_worker)
+function type_task_loss(scheduler, agg_tasks_per_day, nb_worker)
     agg_type_task = zeros((length(scheduler.task_type_indices), nb_worker))
     for (id_t, indices) in enumerate(scheduler.task_type_indices)
-        agg_type_task[id_t, :] = sum(agg_all_tasks_per_day[indices, :], dims=1)
+        agg_type_task[id_t, :] = sum(agg_tasks_per_day[indices, :], dims=1)
     end
 
     agg_worker = sum(agg_type_task, dims=1)
@@ -130,7 +130,7 @@ end
 
 
 function permutations_seed(scheduler)
-    rebalance = @chain scheduler.all_task_indices_per_day begin
+    rebalance = @chain scheduler.tasks_indices_per_day begin
         [t.worker_slots*length(indices) for (t, indices) in _]
         sum
         _ / length(scheduler.workers) / scheduler.days
@@ -140,8 +140,10 @@ function permutations_seed(scheduler)
 
     nb_workers = length(scheduler.workers)
     slots = zeros(Bool, (scheduler.total_tasks, nb_workers))
-    task_type_correction = zeros(Int, (length(scheduler.all_task_indices_per_day), nb_workers))
-    task_type_map = Dict{String, Int}(task.name => id_type for (id_type, (task, indices)) in enumerate(scheduler.all_task_indices_per_day))
+    task_type_correction = zeros(Int, (length(scheduler.tasks_indices_per_day), nb_workers))
+    last_workers = Int[]
+    
+    task_type_map = Dict{String, Int}(task.name => id_type for (id_type, (task, indices)) in enumerate(scheduler.tasks_indices_per_day))
 
     for (day_idx, indices) in enumerate(scheduler.daily_indices)
         daily_workload = zeros(Int, (1, nb_workers))
@@ -156,12 +158,14 @@ function permutations_seed(scheduler)
             type_task = task_type_map[task.name]
             task_type_workload = reshape(task_type_correction[type_task, :], 1, nb_workers)
             workload = workload + task_type_workload // 2 
+            workload[last_workers] .-= 1//10
 
             workload = [(i, w) for (i, w) in enumerate(workload) if !in(day_idx-1, scheduler.workers[i].days_off)]
             workload = sort(workload, by=x->x[2], rev=false)
             
             selected_workers = getindex.(workload, 1)
             selected_workers = selected_workers[1:task.worker_slots]
+            last_workers = selected_workers
             slots[t, selected_workers] .= 1
 
             task_type_correction[type_task, selected_workers] .+= 1
@@ -175,38 +179,31 @@ end
 
 function optimize_task_per_day2(scheduler, best::Matrix{Bool})
     nb_workers = length(scheduler.workers)
-    map_task_day = Dict{Int64, Int64}(id_t => day for (day, task) in enumerate(scheduler.daily_indices) for id_t in task)
-
+    map_task_day = Dict{Int64, Int64}(id_t => day for (day, task) in enumerate(scheduler.daily_indices) 
+                                                  for id_t in task)
     cost_matrix, loss =  task_per_day_loss(scheduler, best, nb_workers)
     task_affected, _ = size(cost_matrix)
-    
     all_squares = Iterators.product(1:task_affected, 1:task_affected, 1:nb_workers, 1:nb_workers)
     all_squares2 = Iterators.filter(x -> (x[1] != x[2]) & (x[3] != x[4]), all_squares)
     all_squares3 = Iterators.filter(x -> cost_matrix[x[1], x[3]] > cost_matrix[x[1], x[4]]+1, all_squares2)
     all_squares4 = Iterators.filter(x -> cost_matrix[x[2], x[4]] > cost_matrix[x[2], x[3]], all_squares3)
-    all_squares5 = Iterators.map(x -> (scheduler.all_task_indices_per_day[x[1]][2], 
-                                    scheduler.all_task_indices_per_day[x[2]][2],
+    all_squares5 = Iterators.map(x -> (scheduler.tasks_indices_per_day[x[1]][2], 
+                                    scheduler.tasks_indices_per_day[x[2]][2],
                                     x[3], x[4], x[1], x[2]), all_squares4)
     all_squares6 = Iterators.flatmap(x -> Iterators.product(x[1], x[2], x[3], x[4], x[5], x[6]), all_squares5)
     all_squares7 = Iterators.filter(x -> map_task_day[x[1]] == map_task_day[x[2]], all_squares6)
     all_squares8 = Iterators.filter(x -> best[x[1], x[3]] & !best[x[1], x[4]], all_squares7)
     all_squares9 = Iterators.filter(x -> !best[x[2], x[3]] & best[x[2], x[4]], all_squares8)
-
-
     for (t1, t2, w1, w2, tp1, tp2) in all_squares9
         if (cost_matrix[tp1, w1] == cost_matrix[tp1, w2]) || (cost_matrix[tp2, w1] == cost_matrix[tp2, w2])
             continue
         end
-
         best = sequence_swap(best, w1, w2, t1, t2)
         cost_matrix[tp1, w1] -= 1
         cost_matrix[tp1, w2] += 1
-
         cost_matrix[tp2, w1] += 1
         cost_matrix[tp2, w2] -= 1
-
     end
-
     return best
 end
 

@@ -1,12 +1,19 @@
 
+function display(scheduler, schedule)
+    println(agg_jobs(scheduler, schedule))
+    println(agg_type(scheduler, schedule))
+    println(agg_time(scheduler, schedule))
+    println(agg_display(scheduler, schedule))
+end
+
 function agg_jobs(scheduler::Scheduler, schedule)
-    tasks_agg = DataFrame(Tasks=[t.name for t in scheduler.task_per_day])
-    nb_jobs = length(scheduler.task_per_day)
+    tasks_agg = DataFrame(Tasks=[t.name for t in scheduler.tasks_per_day])
+    nb_jobs = length(scheduler.tasks_per_day)
     
     for id_worker in 1:length(scheduler.workers)
         
         jobs = findall(x -> x==1, schedule[:, id_worker])
-        jobs = (jobs .+ scheduler.cutoff_N_first) .% nb_jobs
+        jobs = (jobs .+ 0) .% nb_jobs
         jobs = countmap(jobs)
         jobs = DefaultDict(0, jobs) 
         jobs[nb_jobs] = jobs[0]
@@ -25,7 +32,6 @@ function agg_type(scheduler::Scheduler, schedule)
         groupby(_, :Tasks)
         combine(_, names .=> sum)
         rename(_, vcat(["Tasks"], names))
-        push!(_, vcat("Total", sum(schedule, dims=1)...))
     end
 end
 
@@ -44,15 +50,15 @@ function agg_time(scheduler::Scheduler, schedule)
 end
 
 function agg_display(scheduler::Scheduler, schedule)
-    tasks_agg = DataFrame(Tasks=[t.name for t in scheduler.task_per_day])
-    nb_jobs = length(scheduler.task_per_day)
+    tasks_agg = DataFrame(Tasks=[t.name for t in scheduler.tasks_per_day])
+    nb_jobs = length(scheduler.tasks_per_day)
     for i in 1:scheduler.days
         tasks_agg[!, "Day $i"] = repeat([""], nb_jobs)
     end
 
     for (i_day, day) in enumerate(scheduler.daily_indices)
         one_day = Vector{String}()
-        for (task, indices) in scheduler.all_task_indices_per_day
+        for (task, indices) in scheduler.tasks_indices_per_day
             daily_task = [i for i in indices if i in day]
 
             if length(daily_task) == 1
