@@ -14,7 +14,7 @@ include("structures.jl")
 include("core.jl")
 include("display.jl")
 
-export serve, STask, SWorker, Scheduler, fitness, display
+export serve, STask, SWorker, Scheduler, fitness, display_schedule
 export permutations_seed, optimize_permutations, check_satisfability
 
 struct SchedulePayload

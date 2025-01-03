@@ -1,5 +1,5 @@
 
-function display(scheduler, schedule)
+function display_schedule(scheduler, schedule)
     println(agg_jobs(scheduler, schedule))
     println(agg_type(scheduler, schedule))
     println(agg_time(scheduler, schedule))

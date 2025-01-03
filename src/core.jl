@@ -137,6 +137,7 @@ function permutations_seed(scheduler)
         [_*length(w.days_off) for w in scheduler.workers]
         reshape(_, 1, length(_))
     end
+    println(rebalance)
 
     nb_workers = length(scheduler.workers)
     slots = zeros(Bool, (scheduler.total_tasks, nb_workers))

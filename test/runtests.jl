@@ -38,6 +38,13 @@ end
         payload = make_simple_payload(10, 10, 1, 2)
         scheduler = Scheduler(payload)
         @test check_satisfability(scheduler) == (false, "Not enough worker for task Task 1 on day 1")
+
+
+        
+        payload = make_simple_payload(6, 2, 2, 2)
+        payload["workers"][2] = ("Worker 2",  [2, 3, 4])
+        @test check_satisfability(scheduler) == (false, "Not enough worker for task Task 1 on day 1")
+
     end
 
 
@@ -95,7 +102,6 @@ end
     scheduler, seed, res = seed_opti(payload)
     @test fitness(scheduler, res) <= fitness(scheduler, seed) 
     @test fitness(scheduler, res) == 13
-    display(scheduler, res)
     
     payload = make_complex_payload(10, 10, 2, false)
     scheduler, seed, res = seed_opti(payload)
@@ -107,10 +113,13 @@ end
     scheduler, seed, res = seed_opti(payload)
     @test fitness(scheduler, res) <= fitness(scheduler, seed) 
     @test fitness(scheduler, res) == 112
+
+    display_schedule(scheduler, res)
     
     payload["balance_daysoff"] = true
     scheduler, seed, res = seed_opti(payload)
     @test fitness(scheduler, res) <= fitness(scheduler, seed) 
+    display_schedule(scheduler, res)
     
 
 
