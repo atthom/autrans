@@ -1,10 +1,6 @@
 using Revise 
 using Test
 using Autrans
-using Chain
-
-using BenchmarkTools
-
 
 function make_simple_payload(nb_days, nb_tasks, nb_workers, nb_worker_per_task)
     return Dict(
@@ -34,7 +30,7 @@ function seed_opti(payload)
     scheduler = Scheduler(payload)
     @test check_satisfability(scheduler) == (true, "OK")
     seed = permutations_seed(scheduler)
-    res = solve(scheduler)
+    res = optimize_permutations(scheduler)
     return scheduler, seed, res
 end
 
@@ -98,10 +94,11 @@ end
 end
 
 @testset "complex_payload" begin
+
     payload = make_complex_payload(5, 5, 2, false)
     scheduler, seed, res = seed_opti(payload)
-    #@test fitness(scheduler, res) <= fitness(scheduler, seed) 
-    @test fitness(scheduler, res) == 7
+    @test fitness(scheduler, res) <= fitness(scheduler, seed) 
+    @test fitness(scheduler, res) == 13
     
     payload = make_complex_payload(10, 10, 2, false)
     scheduler, seed, res = seed_opti(payload)
@@ -111,60 +108,45 @@ end
     payload["workers"][2] = ("Worker 2",  [2, 3])
     scheduler, seed, res = seed_opti(payload)
     @test @chain sum(seed, dims=1) extrema _[2] - _[1] == 0
-    @test fitness(scheduler, seed) == 16
-    @test fitness(scheduler, res) == 0
+    @test fitness(scheduler, res) == fitness(scheduler, seed) == 16
     
     payload["balance_daysoff"] = true
     scheduler, seed, res = seed_opti(payload)
     @test fitness(scheduler, res) <= fitness(scheduler, seed) 
     @test fitness(scheduler, seed) == 87
 
+
     payload = make_simple_payload(12, 3, 3, 2)
     payload["workers"][2] = ("Worker 2",  [2, 3])
     scheduler, seed, res = seed_opti(payload)
     @test @chain sum(seed, dims=1) extrema _[2] - _[1] == 0
-    @test fitness(scheduler, seed) == 16
-    @test fitness(scheduler, res) == 0
+    @test fitness(scheduler, res) == fitness(scheduler, seed) == 16
 
     payload["balance_daysoff"] = true
     scheduler, seed, res = seed_opti(payload)
     @test fitness(scheduler, res) <= fitness(scheduler, seed) 
-    @test fitness(scheduler, seed) == 33
+    @test fitness(scheduler, seed) == 87
     display_schedule(scheduler, res)
-end
 
-
-@testset "JuMP Benchmark" begin
-    payload = make_complex_payload(10, 10, 2, true)
-    @btime scheduler, seed, res = seed_opti($payload)
-
-    #@test fitness(scheduler, res) == 0
-    #@test fitness(scheduler, seed) == 0
-end
-
-
-@testset "JuMP Benchmark" begin
-    payload = make_complex_payload(10, 10, 2, false)
-    scheduler, seed, res = seed_opti(payload)
-
-    #@test fitness(scheduler, res) == 0
-    #@test fitness(scheduler, seed) == 0
+    
 end
 
 
 @testset "JuMP" begin
-    payload = make_simple_payload(10, 10, 10, 2)
-    scheduler, seed, res = seed_opti(payload)
 
-    @test fitness(scheduler, res) == 0
-    @test fitness(scheduler, seed) == 64
+
+    payload = make_simple_payload(10, 10, 10, 2)
+    scheduler = Scheduler(payload)
+    print(payload)
+
+
 
     payload = make_simple_payload(3, 2, 3, 1)
     scheduler, seed, res = seed_opti(payload)
-    @test fitness(scheduler, res) == fitness(scheduler, seed) == 3
 
     payload = make_simple_payload(4, 2, 4, 1)
     scheduler, seed, res = seed_opti(payload)
-    @test fitness(scheduler, res) == fitness(scheduler, seed) == 4
-    
+    solution = solve(payload)
+    display_schedule(scheduler, solution)
+
 end

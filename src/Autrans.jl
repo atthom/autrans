@@ -9,13 +9,16 @@ using StatsBase
 using HTTP
 using Oxygen
 using OrderedCollections
+using JuMP
+using HiGHS
+using LinearAlgebra
 
 include("structures.jl")
 include("core.jl")
 include("display.jl")
 
 export serve, STask, SWorker, Scheduler, fitness, display_schedule
-export permutations_seed, optimize_permutations, check_satisfability
+export permutations_seed, optimize_permutations, check_satisfability, solve
 
 struct SchedulePayload
     workers::Vector{Tuple{String, Vector{Int}}}

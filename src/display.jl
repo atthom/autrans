@@ -1,8 +1,12 @@
 
 function display_schedule(scheduler, schedule)
+    println("Jobs")
     println(agg_jobs(scheduler, schedule))
+    println("Task Type Diversity")
     println(agg_type(scheduler, schedule))
+    println("Time Diversity")
     println(agg_time(scheduler, schedule))
+    println("Final Display")
     println(agg_display(scheduler, schedule))
 end
 
@@ -11,7 +15,6 @@ function agg_jobs(scheduler::Scheduler, schedule)
     nb_jobs = length(scheduler.tasks_per_day)
     
     for id_worker in 1:length(scheduler.workers)
-        
         jobs = findall(x -> x==1, schedule[:, id_worker])
         jobs = (jobs .+ 0) .% nb_jobs
         jobs = countmap(jobs)
