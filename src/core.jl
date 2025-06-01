@@ -6,7 +6,6 @@ mse(arr) = @chain arr begin
     sum
 end
 
-
 function mse(arr, scheduler::Scheduler)
     all_mse = 0
     nb_workers = length(scheduler.workers)
@@ -39,11 +38,17 @@ function type_task_loss(scheduler, agg_tasks_per_day, nb_worker)
     return mse(agg_type_task) + mse(agg_worker)
 end
 
-function workload_loss(scheduler, schedule, nb_workers)
+function Autrans.workload_loss(scheduler, schedule, nb_workers)
     # equity between worker in daily workload
     agg_all_days = zeros(Int, (scheduler.days, nb_workers))
     for (i, d) in enumerate(scheduler.daily_indices)
         agg_all_days[i, :] = sum(schedule[d, :], dims=1)
+
+        for (i_w, w) in enumerate(scheduler.workers)
+            if i ∈ w.days_off
+                agg_all_days[i, i_w] = div(sum(schedule[d, :]), nb_workers)
+            end
+        end
     end
 
     return mse(agg_all_days, scheduler)
@@ -118,14 +123,12 @@ function sequence_swap(best, worker_max, worker_min, task_give, task_take)
 end
 
 function check_days_off(scheduler, s)
-
     for (w_id, w) in enumerate(scheduler.workers)
         task_off = [t for i in w.days_off for t in scheduler.daily_indices[i+1]]
         if any(s[task_off, w_id])
             println("worker $w_id is working on his day off")
         end
     end
-    
 end
 
 
@@ -303,12 +306,14 @@ function solve(scheduler::Scheduler)
         for (idx, worker) in enumerate(scheduler.workers)
             #daily_workload, rem = divrem(sum(scheduler.indice_task[i].worker_slots for i in day_idx), nb_workers)
             daily_workload, rem = daily_workload_by_worker(scheduler, worker, day_idx)
-            #println("$day_idx $daily_workload $rem")
-            if rem == 0
-                @constraint(model, sum(x[day_indices, idx]) == daily_workload)
+            #println("$day_idx $day_indices $daily_workload $rem $(worker.days_off)")
+            if day_idx ∈ worker.days_off
+                @constraint(model, sum(x[day_indices, idx]) == 0)
+            #elseif rem == 0
+            #    @constraint(model, sum(x[day_indices, idx]) == daily_workload)
             else
                 @constraint(model, sum(x[day_indices, idx]) <= daily_workload + 1)
-                @constraint(model, sum(x[day_indices, idx]) >= daily_workload)
+                @constraint(model, sum(x[day_indices, idx]) >= daily_workload -1)
             end
         end
     end
