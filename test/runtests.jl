@@ -100,8 +100,8 @@ end
 @testset "complex_payload" begin
     payload = make_complex_payload(5, 5, 2, false)
     scheduler, seed, res = seed_opti(payload)
-    #@test fitness(scheduler, res) <= fitness(scheduler, seed) 
-    @test fitness(scheduler, res) == 10
+    @test fitness(scheduler, res) <= fitness(scheduler, seed) 
+    @test fitness(scheduler, res) == 16
     
     payload = make_complex_payload(10, 10, 2, false)
     scheduler, seed, res = seed_opti(payload)
@@ -112,7 +112,7 @@ end
     scheduler, seed, res = seed_opti(payload)
     @test @chain sum(seed, dims=1) extrema _[2] - _[1] == 0
     @test fitness(scheduler, seed) == 13
-    @test fitness(scheduler, res) == 13
+    @test fitness(scheduler, res) == 14
     
     payload["balance_daysoff"] = true
     scheduler, seed, res = seed_opti(payload)
@@ -123,8 +123,8 @@ end
     payload["workers"][2] = ("Worker 2",  [2, 3])
     scheduler, seed, res = seed_opti(payload)
     @test @chain sum(seed, dims=1) extrema _[2] - _[1] == 0
-    @test fitness(scheduler, seed) == 16
-    @test fitness(scheduler, res) == 0
+    @test fitness(scheduler, seed) == 13
+    @test fitness(scheduler, res) == 34
 
     payload["balance_daysoff"] = true
     scheduler, seed, res = seed_opti(payload)

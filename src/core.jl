@@ -244,6 +244,15 @@ function workload_by_worker(scheduler, total_work, nb_workers, worker, minimum_o
 end
 
 
+function Autrans.workload_by_worker(scheduler, total_work, nb_workers, worker, minimum_offday)
+    if scheduler.balance_daysoff
+        return divrem(total_work, nb_workers)
+    else
+        return divrem(total_work, nb_workers)
+    end
+end
+
+
 function daily_workload_by_worker(scheduler, worker::SWorker, day_idx::Int)
     if day_idx ∈ worker.days_off
         return 0, 0
@@ -277,7 +286,7 @@ function solve(scheduler::Scheduler)
     minimum_offday = minimum(length(w.days_off) for w in scheduler.workers)
 
     for (idx, worker) in enumerate(scheduler.workers)
-        workload, rem = workload_by_worker(scheduler, total_work, nb_workers, worker, minimum_offday)
+        workload, rem = Autrans.workload_by_worker(scheduler, total_work, nb_workers, worker, minimum_offday)
         #println("$workload $rem")
         if rem == 0
             @constraint(model, sum(x[:, idx]) == workload)
