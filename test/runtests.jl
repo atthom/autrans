@@ -106,6 +106,24 @@ end
     payload = make_complex_payload(10, 10, 2, false)
     scheduler, seed, res = seed_opti(payload)
     @test fitness(scheduler, res) <= fitness(scheduler, seed) 
+    
+    payload = make_simple_payload(12, 3, 3, 2)
+    payload["workers"][2] = ("Worker 2",  [2, 3])
+    scheduler, seed, res = seed_opti(payload)
+    @test @chain sum(seed, dims=1) extrema _[2] - _[1] == 0
+    @test fitness(scheduler, seed) == 13
+    @test fitness(scheduler, res) == 34
+
+    payload = make_simple_payload(6, 3, 3, 2)
+    payload["workers"][2] = ("Worker 2",  [2, 3])
+    scheduler, seed, res = seed_opti(payload)
+    @test @chain sum(seed, dims=1) extrema _[2] - _[1] == 0
+    @test fitness(scheduler, seed) == 13
+    @test fitness(scheduler, res) == 14
+end
+
+
+@testset "balance_daysoff" begin
 
     payload = make_simple_payload(6, 3, 3, 2)
     payload["workers"][2] = ("Worker 2",  [2, 3])
@@ -119,25 +137,28 @@ end
     @test fitness(scheduler, res) <= fitness(scheduler, seed) 
     @test fitness(scheduler, seed) == 87
 
-    payload = make_simple_payload(12, 3, 3, 2)
-    payload["workers"][2] = ("Worker 2",  [2, 3])
-    scheduler, seed, res = seed_opti(payload)
-    @test @chain sum(seed, dims=1) extrema _[2] - _[1] == 0
-    @test fitness(scheduler, seed) == 13
-    @test fitness(scheduler, res) == 34
 
     payload["balance_daysoff"] = true
     scheduler, seed, res = seed_opti(payload)
     @test fitness(scheduler, res) <= fitness(scheduler, seed) 
     @test fitness(scheduler, seed) == 33
     display_schedule(scheduler, res)
-end
 
+end
 
 @testset "JuMP Benchmark" begin
     payload = make_complex_payload(10, 10, 2, true)
-    @btime scheduler, seed, res = seed_opti($payload)
 
+    println("Benchmark")
+
+    println("Scheduler Creation")
+    @btime scheduler = Scheduler(payload)
+    println("Scheduler SAT")
+    @btime @test check_satisfability(scheduler) == (true, "OK")
+    println("Scheduler permutations_seed")
+    @btime seed = permutations_seed(scheduler)
+    println("Scheduler Solving")
+    @btime res = solve(scheduler)
     #@test fitness(scheduler, res) == 0
     #@test fitness(scheduler, seed) == 0
 end
