@@ -38,7 +38,7 @@ function type_task_loss(scheduler, agg_tasks_per_day, nb_worker)
     return mse(agg_type_task) + mse(agg_worker)
 end
 
-function Autrans.workload_loss(scheduler, schedule, nb_workers)
+function workload_loss(scheduler, schedule, nb_workers)
     # equity between worker in daily workload
     agg_all_days = zeros(Int, (scheduler.days, nb_workers))
     for (i, d) in enumerate(scheduler.daily_indices)
@@ -244,7 +244,7 @@ function workload_by_worker(scheduler, total_work, nb_workers, worker, minimum_o
 end
 
 
-function Autrans.workload_by_worker(scheduler, total_work, nb_workers, worker, minimum_offday)
+function workload_by_worker(scheduler, total_work, nb_workers, worker, minimum_offday)
     if scheduler.balance_daysoff
         return divrem(total_work, nb_workers)
     else
@@ -286,7 +286,7 @@ function solve(scheduler::Scheduler)
     minimum_offday = minimum(length(w.days_off) for w in scheduler.workers)
 
     for (idx, worker) in enumerate(scheduler.workers)
-        workload, rem = Autrans.workload_by_worker(scheduler, total_work, nb_workers, worker, minimum_offday)
+        workload, rem = workload_by_worker(scheduler, total_work, nb_workers, worker, minimum_offday)
         #println("$workload $rem")
         if rem == 0
             @constraint(model, sum(x[:, idx]) == workload)
@@ -318,8 +318,8 @@ function solve(scheduler::Scheduler)
             #println("$day_idx $day_indices $daily_workload $rem $(worker.days_off)")
             if day_idx ∈ worker.days_off
                 @constraint(model, sum(x[day_indices, idx]) == 0)
-            #elseif rem == 0
-            #    @constraint(model, sum(x[day_indices, idx]) == daily_workload)
+            elseif rem == 0
+                @constraint(model, sum(x[day_indices, idx]) == daily_workload)
             else
                 @constraint(model, sum(x[day_indices, idx]) <= daily_workload + 1)
                 @constraint(model, sum(x[day_indices, idx]) >= daily_workload -1)
