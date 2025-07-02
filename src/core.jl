@@ -227,66 +227,16 @@ function optimize_permutations(scheduler)
     return best
 end
 
-function workload_by_worker(scheduler, total_work, nb_workers, worker, minimum_offday)
-    if scheduler.balance_daysoff
-        working_ratio = (scheduler.days - length(worker.days_off) + minimum_offday) / scheduler.days
-        corrected_workload, rem = divrem(working_ratio * total_work, nb_workers)
-        corrected_workload_int = ceil(Int, corrected_workload)
-        rem += corrected_workload - corrected_workload_int
-        if rem == 0
-            return corrected_workload_int, 0
-        else
-            return corrected_workload_int, 1
-        end
-    else
-        return divrem(total_work, nb_workers)
-    end
-end
-
-
-function daily_workload_by_worker(scheduler, worker::SWorker, day_idx::Int)
-    if day_idx ∈ worker.days_off
-        return 0, 0
-    end
-    working_workers = sum(day_idx ∉ w.days_off for w in scheduler.workers)
-    daily_indices = scheduler.daily_indices[day_idx]
-    workload = sum(scheduler.indice_task[t_idx].worker_slots for t_idx in daily_indices)
-
-    return divrem(workload, working_workers)
-end
-
-
-function daily_workload_by_workerFALSE(scheduler, worker::SWorker, day_idx::Int)
-    if day_idx ∈ worker.days_off
-        return 0, 0
-    end
-    
-    working_workers = sum(day_idx ∉ w.days_off for w in scheduler.workers)
-    daily_indices = scheduler.daily_indices[day_idx]
-    workload = sum(scheduler.indice_task[t_idx].worker_slots for t_idx in daily_indices)
-    
-    if length(worker.days_off) > 0
-        # day_off_correction 
-        workload_correction = 0
-        for day_off in worker.days_off
-            workload_correction += length(scheduler.daily_indices[day_off])
-        end
-        workload_correction_per_day, rem_corection = divrem(workload_correction, scheduler.days - length(worker.days_off))
-        workload, rem = divrem(workload + workload_correction_per_day, working_workers)
-        return workload, rem_corection+rem
-    else 
-        return divrem(workload, working_workers)
-    end
-end
-
 
 
 # return array[idx_worker] = ratio of work rescaled by day_off
 function workload_corrected(scheduler::Scheduler)
     nb_workers = length(scheduler.workers)
     
-    no_day_off = sum(length(w.days_off) for w in scheduler.workers) == 0
-    if no_day_off
+
+    #no_day_off = sum(length(w.days_off) for w in scheduler.workers) == 0
+    same_days_offs = unique(length(w.days_off) for w in scheduler.workers) |> length
+    if same_days_offs == 1
         return fill(1, nb_workers)
     end
 
@@ -303,156 +253,186 @@ function workload_corrected(scheduler::Scheduler)
 end
 
 
-
 function solve(scheduler::Scheduler)
-    model = Model(HiGHS.Optimizer)
-    set_silent(model)
-    nb_workers = length(scheduler.workers)
-    
-    @variable(model, x[1:scheduler.total_tasks, 1:nb_workers], Bin)
-
-    # task slots have to be filled
-    #@constraint(model, sum(x) == sum(t.worker_slots for t in values(scheduler.indice_task)))
-    for (idx, task) in scheduler.indice_task
-        @constraint(model, sum(x[idx, :]) == task.worker_slots)
+    try
+        return optimize(scheduler)
+    catch
+        return permutations_seed(scheduler)
     end
+end
 
+# 2.956 - 3.241ms for the seed_opti make_simple_payload(6, 3, 3, 2) balance = true
+# 445ms for optimize make_complex_payload(10, 10, 2, true)
+# 379ms for optimize make_complex_payload(10, 10, 2, true)
+# 73ms for optimize make_complex_payload(10, 10, 2, true)
+# 72ms for optimize make_complex_payload(10, 10, 2, true)
+# 345ms for optimize make_complex_payload(10, 10, 2, true)
+# 158ms for optimize make_complex_payload(10, 10, 2, true)
+
+function optimize(scheduler::Scheduler)
+    nb_workers = length(scheduler.workers)
     # total workload constraints
     total_work = sum(t.worker_slots for (i, t) in scheduler.indice_task)
-    nb_workers = length(scheduler.workers)
-    workload, rem = divrem(sum(t.worker_slots for (i, t) in scheduler.indice_task), nb_workers)
     #minimum_offday = minimum(length(w.days_off) for w in scheduler.workers)
     workload_ratio = workload_corrected(scheduler)
     balance_days = scheduler.balance_daysoff && sum(length(w.days_off) for w in scheduler.workers) != 0
+    same_ratio = all(x-> x == 1, workload_ratio)
 
-    for (idx_w, worker) in enumerate(scheduler.workers)
-        workload, rem =  divrem(total_work, nb_workers)
-
-        workload_worker = workload * workload_ratio[idx_w]
-        workload = floor(Int, workload_worker)
-
-        println("$workload $rem $idx_w")
-        if rem + workload - workload_worker == 0
-            @constraint(model, sum(x[:, idx_w]) == workload)
-        else
-            @constraint(model, sum(x[:, idx_w]) <= workload + 1)
-            @constraint(model, sum(x[:, idx_w]) >= workload)
-        end
-    end
-
-    # task workload per worker (task diversity) constraints
-    for (task, indices) in scheduler.tasks_indices_per_day
-        task_workload, rem = divrem(length(indices) * task.worker_slots, nb_workers)
-
-        for (idx_w, worker) in enumerate(scheduler.workers)
-            task_workload_w = task_workload * workload_ratio[idx_w]
-            task_workload_worker = floor(Int, task_workload_w)
-            println("$task_workload $rem $task_workload_worker")
-
-            if rem + task_workload_w - task_workload_worker == 0 && !balance_days
-                @constraint(model, sum(x[indices, idx_w]) == task_workload_worker)
-            else
-                @constraint(model, sum(x[indices, idx_w]) <= task_workload_worker + 1)
-                @constraint(model, sum(x[indices, idx_w]) >= task_workload_worker)
-            end
-        end
-    end
-
-    # daily workload constraints
-    for (day_idx, day_indices) in enumerate(scheduler.daily_indices)
-        for (idx_w, worker) in enumerate(scheduler.workers)
-            working_workers = sum(day_idx ∉ w.days_off for w in scheduler.workers)
-            workload = sum(scheduler.indice_task[t_idx].worker_slots for t_idx in day_indices)
-            daily_workload, rem = divrem(workload, working_workers)
-
-            #println("$day_idx $day_indices $daily_workload $rem $(worker.days_off)")
-            if day_idx ∈ worker.days_off
-                @constraint(model, sum(x[day_indices, idx_w]) == 0)
-            elseif rem == 0 && !balance_days
-                @constraint(model, sum(x[day_indices, idx_w]) == daily_workload)
-            else
-                @constraint(model, sum(x[day_indices, idx_w]) <= daily_workload + 1)
-                @constraint(model, sum(x[day_indices, idx_w]) >= daily_workload -1)
-            end
-        end
-    end
-
-    # 2.4
-    JuMP.optimize!(model)
-
-    assert_is_solved_and_feasible(model)
-    solution = round.(Int, value.(x))
-    display_schedule(scheduler, solution)
-    return solution
-end
-
-
-function solveOLD(scheduler::Scheduler)
     model = Model(HiGHS.Optimizer)
     set_silent(model)
-    nb_workers = length(scheduler.workers)
-    
     @variable(model, x[1:scheduler.total_tasks, 1:nb_workers], Bin)
 
     # task slots have to be filled
     #@constraint(model, sum(x) == sum(t.worker_slots for t in values(scheduler.indice_task)))
-    for (idx, task) in scheduler.indice_task
-        @constraint(model, sum(x[idx, :]) == task.worker_slots)
-    end
+    #for (idx, task) in scheduler.indice_task
+    #    @constraint(model, sum(x[idx, :]) == task.worker_slots)
+    #end
+    @constraint(model, [idx in 1:length(scheduler.indice_task)], sum(x[idx, :]) == scheduler.indice_task[idx].worker_slots)
+    
+    #workload_cst = fill(0, nb_workers)
+    workload, rem = divrem(total_work, nb_workers)
+    workload_worker = workload .* workload_ratio
+    workload_cst = floor.(Int, workload_worker)
+    workload_rem = rem .+ workload_cst .- workload_worker
+    workload_rem = workload_rem .!= 0
+    #println(workload_cst, " ", workload_rem)
+    #if same_ratio
+    #    @constraint(model, [idx_w in 1:nb_workers], workload_cst[1] <= sum(x[:, idx_w]) <= workload_cst[1] + workload_rem[1])
+    #else
+    @constraint(model, [idx_w in 1:nb_workers], workload_cst[idx_w] <= sum(x[:, idx_w]) <= workload_cst[idx_w] + workload_rem[idx_w])
+    #end
+    #for idx_w in 1:nb_workers
+    #    workload, rem = divrem(total_work, nb_workers)
+    #    workload_worker = workload * workload_ratio[idx_w]
+    #    workload = floor(Int, workload_worker)
 
-    # total workload constraints
-    total_work = sum(t.worker_slots for (i, t) in scheduler.indice_task)
-    nb_workers = length(scheduler.workers)
-    workload, rem = divrem(sum(t.worker_slots for (i, t) in scheduler.indice_task), nb_workers)
-    minimum_offday = minimum(length(w.days_off) for w in scheduler.workers)
-
-    for (idx, worker) in enumerate(scheduler.workers)
-        workload, rem = workload_by_worker(scheduler, total_work, nb_workers, worker, minimum_offday)
-        #println("$workload $rem")
-        if rem == 0
-            @constraint(model, sum(x[:, idx]) == workload)
-        else
-            @constraint(model, sum(x[:, idx]) <= workload + 1)
-            @constraint(model, sum(x[:, idx]) >= workload)
-        end
-    end
+        #println("$workload $rem $idx_w")
+    #    if rem + workload - workload_worker == 0
+            #@constraint(model, sum(x[:, idx_w]) == workload)
+    #        @constraint(model, workload <= sum(x[:, idx_w]) <= workload )
+    #    else
+    #        @constraint(model, workload <= sum(x[:, idx_w]) <= workload + 1)
+            #@constraint(model, sum(x[:, idx_w]) <= workload + 1)
+            #@constraint(model, sum(x[:, idx_w]) >= workload)
+    #    end
+    #end
 
     # task workload per worker (task diversity) constraints
     for (task, indices) in scheduler.tasks_indices_per_day
         task_workload, rem = divrem(length(indices) * task.worker_slots, nb_workers)
-        for (idx_w, worker) in enumerate(scheduler.workers)
-            if rem == 0
-                @constraint(model, sum(x[indices, idx_w]) == task_workload)
-            else
-                @constraint(model, sum(x[indices, idx_w]) <= task_workload + 1)
-                @constraint(model, sum(x[indices, idx_w]) >= task_workload)
-            end
-        end
+        task_workload_w = task_workload .* workload_ratio
+        task_workload_w_cst = floor.(Int, task_workload_w)
+        # && !balance_days
+        task_workload_rem = rem .+ task_workload_w - task_workload_w_cst .!= 0
+        #println(task_workload_w_cst, task_workload_rem)
+        @constraint(model, [idx_w in 1:nb_workers], task_workload_w_cst[idx_w] <= sum(x[indices, idx_w]) <= task_workload_w_cst[idx_w] + task_workload_rem[idx_w])
+
+        #for idx_w in 1:nb_workers
+        #    task_workload_w = task_workload * workload_ratio[idx_w]
+        #    task_workload_worker = floor(Int, task_workload_w)
+            #println("$task_workload $rem $task_workload_worker")
+
+        #    if rem + task_workload_w - task_workload_worker == 0 && !balance_days
+        #        @constraint(model, sum(x[indices, idx_w]) == task_workload_worker)
+                #@constraint(model, task_workload_worker <= sum(x[indices, idx_w]) <= task_workload_worker)
+        #    else
+                #task_workload_worker
+                #@constraint(model, task_workload_worker <= sum(x[indices, idx_w]) <= task_workload_worker + 1)
+        #        @constraint(model, sum(x[indices, idx_w]) <= task_workload_worker + 1)
+        #        @constraint(model, sum(x[indices, idx_w]) >= task_workload_worker)
+        #    end
+        #end
     end
 
-    no_day_off = sum(length(w.days_off) for w in scheduler.workers) == 0
+    #for (task, indices) in scheduler.tasks_indices_per_day
+    #    task_workload, rem = divrem(length(indices) * task.worker_slots, nb_workers)
+
+    #    for idx_w in 1:nb_workers
+    #        task_workload_w = task_workload * workload_ratio[idx_w]
+    #        task_workload_worker = floor(Int, task_workload_w)
+    #        println("$task_workload $rem $task_workload_worker")
+
+    #        if rem + task_workload_w - task_workload_worker == 0 && !balance_days
+    #            @constraint(model, sum(x[indices, idx_w]) == task_workload_worker)
+                #@constraint(model, task_workload_worker <= sum(x[indices, idx_w]) <= task_workload_worker)
+    #        else
+                #task_workload_worker
+                #@constraint(model, task_workload_worker <= sum(x[indices, idx_w]) <= task_workload_worker + 1)
+    #           @constraint(model, sum(x[indices, idx_w]) <= task_workload_worker + 1)
+    #            @constraint(model, sum(x[indices, idx_w]) >= task_workload_worker)
+    #       end
+    #    end
+    #end
+
     # daily workload constraints
     for (day_idx, day_indices) in enumerate(scheduler.daily_indices)
-        #daily_workload, rem = divrem(sum(scheduler.indice_task[i].worker_slots for i in day_idx), nb_workers)
-        for (idx, worker) in enumerate(scheduler.workers)
-            #daily_workload, rem = divrem(sum(scheduler.indice_task[i].worker_slots for i in day_idx), nb_workers)
-            daily_workload, rem = daily_workload_by_worker(scheduler, worker, day_idx)
-            #println("$day_idx $day_indices $daily_workload $rem $(worker.days_off)")
-            if day_idx ∈ worker.days_off
-                @constraint(model, sum(x[day_indices, idx]) == 0)
-            elseif rem == 0 && no_day_off
-                @constraint(model, sum(x[day_indices, idx]) == daily_workload)
-            else
-                @constraint(model, sum(x[day_indices, idx]) <= daily_workload + 1)
-                @constraint(model, sum(x[day_indices, idx]) >= daily_workload -1)
-            end
+        working_workers = sum(day_idx ∉ w.days_off for w in scheduler.workers)
+        workload = sum(scheduler.indice_task[t_idx].worker_slots for t_idx in day_indices)
+        daily_workload, rem = divrem(workload, working_workers)
+        daily_rem = rem != 0 || balance_days
+
+        daily_workload_by_worker_inf = fill(daily_workload, nb_workers)
+        daily_workload_by_worker_sup = fill(daily_workload, nb_workers)
+
+        if daily_rem
+            daily_workload_by_worker_inf = daily_workload_by_worker_inf .- 1
+            daily_workload_by_worker_sup = daily_workload_by_worker_sup .+ 1
         end
+
+        days_off = [i for (i, w) in enumerate(scheduler.workers) if day_idx ∈ w.days_off]
+        daily_workload_by_worker_inf[days_off] .= 0
+        daily_workload_by_worker_sup[days_off] .= 0
+
+        @constraint(model, [idx_w in 1:nb_workers], daily_workload_by_worker_inf[idx_w] <= sum(x[day_indices, idx_w]) <= daily_workload_by_worker_sup[idx_w])
+
+        #for (idx_w, worker) in enumerate(scheduler.workers)
+        #    working_workers = sum(day_idx ∉ w.days_off for w in scheduler.workers)
+        #    workload = sum(scheduler.indice_task[t_idx].worker_slots for t_idx in day_indices)
+        #    daily_workload, rem = divrem(workload, working_workers)
+
+            #println("$day_idx $day_indices $daily_workload $rem $(worker.days_off)")
+        #    if day_idx ∈ worker.days_off
+        #        @constraint(model, sum(x[day_indices, idx_w]) == 0)
+         #   elseif rem == 0 && !balance_days
+         #       @constraint(model, sum(x[day_indices, idx_w]) == daily_workload)
+                #@constraint(model, daily_workload <= sum(x[day_indices, idx_w]) <= daily_workload)
+         #   else
+         #       #@constraint(model, daily_workload -1 <= sum(x[day_indices, idx_w]) <= daily_workload -1)
+         #       @constraint(model, sum(x[day_indices, idx_w]) <= daily_workload + 1)
+          #      @constraint(model, sum(x[day_indices, idx_w]) >= daily_workload -1)
+          #  end
+        #end
     end
+
+
+    #if false
+    # daily workload constraints
+    #    for (day_idx, day_indices) in enumerate(scheduler.daily_indices)
+    #        for (idx_w, worker) in enumerate(scheduler.workers)
+    #            working_workers = sum(day_idx ∉ w.days_off for w in scheduler.workers)
+    #            workload = sum(scheduler.indice_task[t_idx].worker_slots for t_idx in day_indices)
+    #            daily_workload, rem = divrem(workload, working_workers)
+
+                #println("$day_idx $day_indices $daily_workload $rem $(worker.days_off)")
+    #            if day_idx ∈ worker.days_off
+    #                @constraint(model, sum(x[day_indices, idx_w]) == 0)
+    #            elseif rem == 0 && !balance_days
+    #                @constraint(model, sum(x[day_indices, idx_w]) == daily_workload)
+                    #@constraint(model, daily_workload <= sum(x[day_indices, idx_w]) <= daily_workload)
+    #            else
+    #                #@constraint(model, daily_workload -1 <= sum(x[day_indices, idx_w]) <= daily_workload -1)
+    #                @constraint(model, sum(x[day_indices, idx_w]) <= daily_workload + 1)
+    #                @constraint(model, sum(x[day_indices, idx_w]) >= daily_workload -1)
+    #            end
+    #        end
+    #    end
+    #end
 
     # 2.4
     JuMP.optimize!(model)
-
     assert_is_solved_and_feasible(model)
     solution = round.(Int, value.(x))
+    #display_schedule(scheduler, solution)
     return solution
 end
+
