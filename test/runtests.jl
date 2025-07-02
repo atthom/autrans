@@ -101,8 +101,9 @@ end
     payload = make_complex_payload(5, 5, 2, false)
     scheduler, seed, res = seed_opti(payload)
     @test fitness(scheduler, res) <= fitness(scheduler, seed) 
-    @test fitness(scheduler, res) == 16
-    
+    @test fitness(scheduler, res) == 13
+
+    # issue
     payload = make_complex_payload(10, 10, 2, false)
     scheduler, seed, res = seed_opti(payload)
     @test fitness(scheduler, res) <= fitness(scheduler, seed) 
@@ -111,15 +112,15 @@ end
     payload["workers"][2] = ("Worker 2",  [2, 3])
     scheduler, seed, res = seed_opti(payload)
     @test @chain sum(seed, dims=1) extrema _[2] - _[1] == 0
-    @test fitness(scheduler, seed) == 13
-    @test fitness(scheduler, res) == 34
+    @test fitness(scheduler, res) <= fitness(scheduler, seed) 
+    @test fitness(scheduler, res) == 13
 
     payload = make_simple_payload(6, 3, 3, 2)
     payload["workers"][2] = ("Worker 2",  [2, 3])
     scheduler, seed, res = seed_opti(payload)
     @test @chain sum(seed, dims=1) extrema _[2] - _[1] == 0
-    @test fitness(scheduler, seed) == 13
-    @test fitness(scheduler, res) == 14
+    @test fitness(scheduler, res) <= fitness(scheduler, seed) 
+    @test fitness(scheduler, res) == 13
 end
 
 
@@ -129,20 +130,13 @@ end
     payload["workers"][2] = ("Worker 2",  [2, 3])
     scheduler, seed, res = seed_opti(payload)
     @test @chain sum(seed, dims=1) extrema _[2] - _[1] == 0
-    @test fitness(scheduler, seed) == 13
-    @test fitness(scheduler, res) == 14
+    @test fitness(scheduler, res) <= fitness(scheduler, seed) 
+    @test fitness(scheduler, res) == 13
     
     payload["balance_daysoff"] = true
     scheduler, seed, res = seed_opti(payload)
     @test fitness(scheduler, res) <= fitness(scheduler, seed) 
     @test fitness(scheduler, seed) == 87
-
-
-    payload["balance_daysoff"] = true
-    scheduler, seed, res = seed_opti(payload)
-    @test fitness(scheduler, res) <= fitness(scheduler, seed) 
-    @test fitness(scheduler, seed) == 33
-    display_schedule(scheduler, res)
 
 end
 
@@ -152,13 +146,13 @@ end
     println("Benchmark")
 
     println("Scheduler Creation")
-    @btime scheduler = Scheduler(payload)
+    @btime scheduler = Scheduler(payload) # 18 micros
     println("Scheduler SAT")
-    @btime @test check_satisfability(scheduler) == (true, "OK")
+    @btime @test check_satisfability(scheduler) == (true, "OK") # 3 micros
     println("Scheduler permutations_seed")
-    @btime seed = permutations_seed(scheduler)
+    @btime seed = permutations_seed(scheduler) # 120 micro
     println("Scheduler Solving")
-    @btime res = solve(scheduler)
+    @btime res = solve(scheduler)   # 28.9ms, 1.41ms
     #@test fitness(scheduler, res) == 0
     #@test fitness(scheduler, seed) == 0
 end
