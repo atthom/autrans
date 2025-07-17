@@ -101,7 +101,7 @@ end
     payload = make_complex_payload(5, 5, 2, false)
     scheduler, seed, res = seed_opti(payload)
     @test fitness(scheduler, res) <= fitness(scheduler, seed) 
-    @test fitness(scheduler, res) == 13
+    @test fitness(scheduler, res) == 10
 
     # issue
     payload = make_complex_payload(10, 10, 2, false)
@@ -142,28 +142,31 @@ end
 
 @testset "JuMP Benchmark" begin
     payload = make_complex_payload(10, 10, 2, true)
-
     println("Benchmark")
-
     println("Scheduler Creation")
     @btime scheduler = Scheduler(payload) # 18 micros
+    scheduler = Scheduler(payload)
     println("Scheduler SAT")
-    @btime @test check_satisfability(scheduler) == (true, "OK") # 3 micros
+    @btime @test check_satisfability($scheduler) == (true, "OK") # 3 micros
     println("Scheduler permutations_seed")
-    @btime seed = permutations_seed(scheduler) # 120 micro
+    @btime seed = permutations_seed($scheduler) # 120 micro
+    seed = permutations_seed(scheduler) 
     println("Scheduler Solving")
-    @btime res = solve(scheduler)   # 28.9ms, 1.41ms
-    #@test fitness(scheduler, res) == 0
+    @btime res = solve($scheduler)   # 28.9ms, 1.41ms, 328.853ms
+    res = solve(scheduler)
+    @test fitness(scheduler, res) <= 15
     #@test fitness(scheduler, seed) == 0
 end
 
-
-@testset "JuMP Benchmark" begin
-    payload = make_complex_payload(10, 10, 2, false)
+@testset "primediv" begin
+    payload = make_simple_payload(5, 7, 11, 3)
     scheduler, seed, res = seed_opti(payload)
+    @test fitness(scheduler, res) <= 20
+    @test fitness(scheduler, seed) == 70
 
-    #@test fitness(scheduler, res) == 0
-    #@test fitness(scheduler, seed) == 0
+    #payload = make_complex_payload(5, 7, 11, 3)
+    #scheduler, seed, res = seed_opti(payload)
+
 end
 
 

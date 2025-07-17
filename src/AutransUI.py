@@ -352,7 +352,7 @@ if submit:
         #end = selected_days.index(name_end) +1
         
         start = 1
-        end = len(selected_days) +1
+        end = len(selected_days)
         #print(task_name, st.session_state["first_day_tasks"])
         if task_name not in st.session_state["first_day_tasks"]:
             print(task_name)

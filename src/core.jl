@@ -152,11 +152,60 @@ function workload_corrected(scheduler::Scheduler)
 end
 
 
+function solve_same_taskload_same_dayoff(scheduler::Scheduler)
+    model = Model(HiGHS.Optimizer)
+    set_silent(model)
+    @variable(model, x[1:scheduler.total_tasks], Bin)
+    # global task (task diversity) constraints
+
+    total_work = sum(t.worker_slots for (i, t) in scheduler.indice_task)
+    nb_workers = length(scheduler.workers)
+    workload, rem = divrem(total_work, nb_workers)
+    rem = Int(rem > 0)
+    @constraint(model, workload <= sum(x) <= workload + rem)
+
+    for (task, indices) in scheduler.tasks_indices_per_day
+        task_workload, rem = divrem(length(indices) * task.worker_slots, nb_workers)
+        rem = Int(rem > 0)
+        @constraint(model, task_workload <= sum(x[indices]) <= task_workload + rem)
+    end
+
+    # daily workload constraints
+    for (day_idx, day_indices) in enumerate(scheduler.daily_indices)
+        workload = sum(scheduler.indice_task[t_idx].worker_slots for t_idx in day_indices)
+        daily_workload, rem = divrem(workload, nb_workers)
+        daily_rem = rem > 0 || balance_days
+        @constraint(model, daily_workload <= sum(x[day_indices]) <= daily_workload + Int(daily_rem))
+        #@constraint(model, [idx_w in 1:nb_workers], sum(x[day_indices, idx_w]) == daily_workload_by_worker_sup[idx_w])
+    end
+
+    # 2.4
+    JuMP.optimize!(model)
+    assert_is_solved_and_feasible(model)
+    solution = round.(Int, value.(x))
+
+    results = Vector{Vector{Int}}(undef, nb_workers)
+    current = solution
+
+    for i in 1:nb_workers
+        results[i] = current
+        current = circshift(current, length(scheduler.tasks_per_day))
+    end
+
+    return results = hcat(results...)
+    #fitness(scheduler, results, true)
+end
+
+
 function solve(scheduler::Scheduler)
     try
-        return optimize(scheduler)
+        return optimize(scheduler, 0)
     catch
-        return permutations_seed(scheduler)
+        try
+            return optimize(scheduler, 1)
+        catch
+            return permutations_seed(scheduler)
+        end
     end
 end
 
@@ -165,10 +214,15 @@ end
 # 379ms for optimize make_complex_payload(10, 10, 2, true)
 # 73ms for optimize make_complex_payload(10, 10, 2, true)
 # 72ms for optimize make_complex_payload(10, 10, 2, true)
-# 345ms for optimize make_complex_payload(10, 10, 2, true)
+# 345ms for optimize make_complex_payload(10, 10, 2, true) # increased accuracy but unstable
 # 158ms for optimize make_complex_payload(10, 10, 2, true)
 
-function optimize(scheduler::Scheduler)
+
+# 1.5s for optimize make_simple_payload(10, 10, 10, 2)
+function optimize(scheduler::Scheduler, relax=0)
+    model = Model(HiGHS.Optimizer)
+    set_silent(model)
+
     nb_workers = length(scheduler.workers)
     # total workload constraints
     total_work = sum(t.worker_slots for (i, t) in scheduler.indice_task)
@@ -177,8 +231,6 @@ function optimize(scheduler::Scheduler)
     balance_days = scheduler.balance_daysoff && sum(length(w.days_off) for w in scheduler.workers) != 0
     same_ratio = all(x-> x == 1, workload_ratio)
 
-    model = Model(HiGHS.Optimizer)
-    set_silent(model)
     @variable(model, x[1:scheduler.total_tasks, 1:nb_workers], Bin)
 
     # task slots have to be filled
@@ -190,6 +242,7 @@ function optimize(scheduler::Scheduler)
     workload_cst = floor.(Int, workload_worker)
     workload_rem = rem .+ workload_cst .- workload_worker
     workload_rem = workload_rem .!= 0
+
     @constraint(model, [idx_w in 1:nb_workers], workload_cst[idx_w] <= sum(x[:, idx_w]) <= workload_cst[idx_w] + workload_rem[idx_w])
 
     # task workload per worker (task diversity) constraints
@@ -199,6 +252,7 @@ function optimize(scheduler::Scheduler)
         task_workload_w_cst = floor.(Int, task_workload_w)
         # && !balance_days
         task_workload_rem = rem .+ task_workload_w - task_workload_w_cst .!= 0
+
         @constraint(model, [idx_w in 1:nb_workers], task_workload_w_cst[idx_w] <= sum(x[indices, idx_w]) <= task_workload_w_cst[idx_w] + task_workload_rem[idx_w])
     end
 
@@ -214,7 +268,7 @@ function optimize(scheduler::Scheduler)
         daily_workload_by_worker_sup = fill(daily_workload, nb_workers)
 
         if daily_rem
-            daily_workload_by_worker_inf = daily_workload_by_worker_inf .- 1
+            daily_workload_by_worker_inf = daily_workload_by_worker_inf .- relax
             daily_workload_by_worker_sup = daily_workload_by_worker_sup .+ 1
         end
 
@@ -223,6 +277,7 @@ function optimize(scheduler::Scheduler)
         daily_workload_by_worker_sup[days_off] .= 0
 
         @constraint(model, [idx_w in 1:nb_workers], daily_workload_by_worker_inf[idx_w] <= sum(x[day_indices, idx_w]) <= daily_workload_by_worker_sup[idx_w])
+        #@constraint(model, [idx_w in 1:nb_workers], sum(x[day_indices, idx_w]) == daily_workload_by_worker_sup[idx_w])
 
     end
 

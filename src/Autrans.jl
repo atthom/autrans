@@ -1,9 +1,9 @@
 module Autrans
 
 using DataFrames
-using Metaheuristics
+#using Metaheuristics
 using Chain
-using Combinatorics
+#using Combinatorics
 using DataStructures
 using StatsBase
 using HTTP
@@ -11,7 +11,7 @@ using Oxygen
 using OrderedCollections
 using JuMP
 using HiGHS
-using LinearAlgebra
+#using LinearAlgebra
 
 include("structures.jl")
 include("core.jl")
@@ -34,13 +34,13 @@ function process_payload(req::HTTP.Request)
     
     payload = Dict(
         "workers" => schedule_payload.workers,
-        "tasks"=> schedule_payload.tasks,
+        "tasks" => schedule_payload.tasks,
         "task_per_day" => [task_id[t] for t in schedule_payload.task_per_day], 
         "days" => schedule_payload.nb_days, 
         "balance_daysoff" => schedule_payload.balance_daysoff
     )
 
-    #@show payload
+    @show payload
 
     return Scheduler(payload)
 end
@@ -48,7 +48,7 @@ end
 @post "/schedule" function(req::HTTP.Request)
     @time begin
         scheduler = process_payload(req)
-        schedule = optimize_permutations(scheduler)
+        schedule = solve(scheduler)
         payload_back = Dict(
             "jobs" => agg_jobs(scheduler, schedule),
             "type" => agg_type(scheduler, schedule),
@@ -74,7 +74,9 @@ end
 
 staticfiles("content", "static")
 
-#serve()
+serve()
 
 
+
+# payload = Dict{String, Any}("tasks" => [("Vaisselle Matin", 2, 1, 1, 7), ("Repas Midi", 3, 1, 0, 7), ("Vaisselle Midi", 2, 1, 0, 7), ("Repas Soir", 3, 1, 0, 6), ("Vaisselle Soir", 2, 1, 0, 6)], "days" => 7, "workers" => [("Jon", Int64[]), ("KAYOU", Int64[]), ("Bizzard", Int64[]), ("Bentho", Int64[]), ("Beurre", Int64[]), ("Poulpy", Int64[]), ("xX_Loan_Xx", [0]), ("Azriel", [0]), ("Melanight", [0, 3, 4]), ("Fishy", [0]), ("Cedric", [1]), ("Bere", [0, 1]), ("Curtis", Int64[]), ("Vydrat", [0, 1, 2, 3])], "balance_daysoff" => true, "task_per_day" => [0, 1, 2, 3, 4])
 end

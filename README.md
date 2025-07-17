@@ -9,4 +9,4 @@
 
 ### Start Python UI
 
-`streamlit run ./src/AutransUI.py`
+`uv run streamlit run ./src/AutransUI.py`

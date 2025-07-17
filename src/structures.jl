@@ -37,7 +37,7 @@ function Scheduler(payload::Dict)
     #N_first, N_last, days = payload["cutoff_N_first"], payload["cutoff_N_last"], payload["days"]
     tasks_per_day = [tasks[i] for i in payload["task_per_day"] .+ 1]
 
-    total_task = sum(t.range[2] - t.range[1] + 1 for t in tasks_per_day)
+    total_tasks = sum(t.range[2] - t.range[1] + 1 for t in tasks_per_day)
 
     tasks_indices_per_day, daily, indice_task = task_indices(tasks_per_day, days)
 
@@ -48,7 +48,7 @@ function Scheduler(payload::Dict)
                 for t1 in unique_tasks]
 
     
-    return Scheduler(workers, tasks_per_day, days, total_task, tasks_indices_per_day, indice_task, task_type, daily, balance_daysoff)
+    return Scheduler(workers, tasks_per_day, days, total_tasks, tasks_indices_per_day, indice_task, task_type, daily, balance_daysoff)
 end
 
 
@@ -77,14 +77,14 @@ end
 
 get_task(s::Scheduler, id::Int) = s.indice_task[id]
 
-function task_indices(task_per_day::Vector{STask}, days::Int)
-    all_indices = OrderedDict{STask, Vector{Int}}(t => [] for t in task_per_day)
+function task_indices(tasks_per_day::Vector{STask}, days::Int)
+    all_indices = OrderedDict{STask, Vector{Int}}(t => [] for t in tasks_per_day)
     daily_indices = [Int[] for i in 1:days]
     idx_tasks = Dict{Int, STask}()
     
     current_ids = 0
     for day in 1:days
-        for task in task_per_day
+        for task in tasks_per_day
             if task.range[1] <= day <= task.range[2]
                 current_ids += 1
                 push!(all_indices[task], current_ids)
