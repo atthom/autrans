@@ -368,7 +368,7 @@ if submit:
         w_name = st.session_state[f"worker_name_{i}"]
         if f"worker_days_off_{i}" in st.session_state:
             w_days_off = st.session_state[f"worker_days_off_{i}"]
-            w_days_off_idx = [selected_days.index(d) for d in w_days_off]
+            w_days_off_idx = [selected_days.index(d)+1 for d in w_days_off]
         else:
             w_days_off_idx = []
         workers.append((w_name, w_days_off_idx))
