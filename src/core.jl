@@ -139,19 +139,36 @@ function workload_corrected(scheduler::Scheduler)
         return fill(1, nb_workers)
     end
 
+    #println(nb_workers)
     # compute the ratio of days worked compare to the full planning duration
     all_ratio = (scheduler.days .- [length(w.days_off) for w in scheduler.workers]) ./ scheduler.days
+    #println(all_ratio)
     # problem is that we "miss" some attributions because some workers are away
     # everyone will have to work more to cover theses missed attributions
     # it's easily proven by sum(all_ratio) < workers
     # we need to normalize the array so sum(all_ratio) == workers
     # in other terms we want a new all_ratio where average(all_ratio) = 1
     # this is done with multipling by the number of worker and divided by what is already in the array
+    
+    # quick fix to increase spreading of the ratio
+    # without it it feels like people with day offs work too much respective to their number of day off
+    all_ratio .^= 1.5
+    #println(all_ratio)
     all_ratio .*= nb_workers / sum(all_ratio)
+    #println(all_ratio)
     return all_ratio
 end
+#     [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.8571428571428571, 0.8571428571428571, 0.5714285714285714, 0.8571428571428571, 0.8571428571428571, 0.7142857142857143, 1.0, 0.42857142857142855]
+#1    [1.1529411764705884, 1.1529411764705884, 1.1529411764705884, 1.1529411764705884, 1.1529411764705884, 1.1529411764705884, 0.9882352941176471, 0.9882352941176471, 0.6588235294117647, 0.9882352941176471, 0.9882352941176471, 0.823529411764706, 1.1529411764705884, 0.49411764705882355]
+#.^2  [1.277467411545624, 1.277467411545624, 1.277467411545624, 1.277467411545624, 1.277467411545624, 1.277467411545624, 0.9385474860335196, 0.9385474860335196, 0.4171322160148976, 0.9385474860335196, 0.9385474860335196, 0.6517690875232776, 1.277467411545624, 0.2346368715083799]
+#.^1.5 [1.2184034045945484, 1.2184034045945484, 1.2184034045945484, 1.2184034045945484, 1.2184034045945484, 1.2184034045945484, 0.9668763099470924, 0.9668763099470924, 0.5263008008345449, 0.9668763099470924, 0.9668763099470924, 0.7355277295491377, 1.2184034045945484, 0.3418423976661076]
 
-
+# interpolate (2, 2), (1.5, 2), (1.3, 5), (1.4, 2), (1.8, 2), (1.35, 5), (1.375, 2)
+# 1 => 5
+# ^2 => 2
+# ^1.5 => 2
+# ^1.3 => 5
+# ^1.4 => 2
 function solve_same_taskload_same_dayoff(scheduler::Scheduler)
     model = Model(HiGHS.Optimizer)
     set_silent(model)
