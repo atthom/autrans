@@ -82,16 +82,16 @@ def display_worker(worker_name, worker_days_off, i):
     if st.session_state['with_days_off']:
         worker_row_i = st.columns([2, 3, 1], vertical_alignment="bottom")
         
-        worker_name_i = worker_row_i[0].text_input("", value=worker_name, key=f"worker_name_{i}", placeholder="Bob, Alice...", label_visibility="collapsed")
-        worker_days_off_i = worker_row_i[1].multiselect("", options=selected_days, default=worker_days_off, key=f"worker_days_off_{i}",
-                                                    help="Select days off, leave empty for no days off", label_visibility="collapsed")
+        worker_name_i = worker_row_i[0].text_input(f"worker name {i}", value=worker_name, key=f"worker_name_{i}", placeholder="name", label_visibility="collapsed")
+        worker_days_off_i = worker_row_i[1].multiselect(f"days_off{i}", options=selected_days, default=worker_days_off, key=f"worker_days_off_{i}",
+                                                    help="Select days off, leave empty for no days off", placeholder="days off", label_visibility="collapsed")
         worker_row_i[2].button("", icon=":material/close:", type="secondary", 
                     key=f"del_worker_{i}", use_container_width=True,
                     on_click=del_worker, args=[i])
         
     else:
         worker_row_i = st.columns([4, 1], vertical_alignment="bottom")
-        worker_name_i = worker_row_i[0].text_input("", value=worker_name, key=f"worker_name_{i}", placeholder="Bob, Alice...", label_visibility="collapsed")
+        worker_name_i = worker_row_i[0].text_input(f"worker name {i}", value=worker_name, key=f"worker_name_{i}", placeholder="name", label_visibility="collapsed")
         worker_days_off_i = []
         worker_row_i[1].button("", icon=":material/close:", type="secondary", 
                     key=f"del_worker_{i}", use_container_width=True,
@@ -192,7 +192,9 @@ def display_chores_section():
                 st.session_state['chores'][i] = (chore_name_i, nb_worker_i, 1, chore_start_i, chore_end_i, color_i)
 
         row_add = st.columns([2, 2, 2])
+        st.markdown('<div class="action-button">', unsafe_allow_html=True)
         btn_chore = row_add[1].button("Add Chore", icon=":material/add:", type="primary", key="btn_add_chore", on_click=add_chore)
+        st.markdown('</div>', unsafe_allow_html=True)
 
         task_per_day, _, _, _, _, _ = zip(*st.session_state['chores'])
 
@@ -250,7 +252,9 @@ def display_worker_section():
                 worker_name_i, worker_days_off_i = display_worker(worker_name_i, worker_days_off_i, i)
 
         row_add = st.columns([2, 2, 2])
+        st.markdown('<div class="action-button">', unsafe_allow_html=True)
         btn_task = row_add[1].button("Add Worker", icon=":material/add:", type="primary", on_click=add_worker)
+        st.markdown('</div>', unsafe_allow_html=True)
 
         balance_row = st.columns([2, 4])
         balance_row[0].markdown("**Balance:**")
@@ -277,18 +281,14 @@ if True:
             .stDeployButton {display:none;}
             footer {visibility: hidden;}
             #stDecoration {display:none;}
-            .stButton button {
+            .action-button .stButton button {
                 background-color: #28a745 !important;
                 color: white !important;
                 border-color: #28a745 !important;
             }
-            .stButton button:hover:not([data-testid*="secondary"]) {
+            .action-button .stButton button:hover {
                 background-color: #218838 !important;
                 border-color: #218838 !important;
-            }
-            .stButton button[data-testid*="secondary"]:hover {
-                background-color: #ffffff !important;
-                border-color: #31333f33 !important;
             }
         </style>
     """, unsafe_allow_html=True)
@@ -338,7 +338,9 @@ with settings.container(border=True):
             row7[0].badge("Copied to Clipboard", icon=":material/check:", color="green")
 
     row6 = st.columns([2, 2, 2])
+    st.markdown('<div class="action-button">', unsafe_allow_html=True)
     submit = row6[1].button("Submit", type="primary", key="submit")
+    st.markdown('</div>', unsafe_allow_html=True)
 
  
 with tables:
