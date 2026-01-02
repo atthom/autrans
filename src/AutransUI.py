@@ -82,16 +82,16 @@ def display_worker(worker_name, worker_days_off, i):
     if st.session_state['with_days_off']:
         worker_row_i = st.columns([2, 3, 1], vertical_alignment="bottom")
         
-        worker_name_i = worker_row_i[0].text_input("worker name", value=worker_name, key=f"worker_name_{i}", placeholder="Bob, Alice...", label_visibility="collapsed")
-        worker_days_off_i = worker_row_i[1].multiselect("workers days off", options=selected_days, default=worker_days_off, key=f"worker_days_off_{i}",
-                                                    help="Select on which days this person will not be working", label_visibility="collapsed")
+        worker_name_i = worker_row_i[0].text_input("", value=worker_name, key=f"worker_name_{i}", placeholder="Bob, Alice...", label_visibility="collapsed")
+        worker_days_off_i = worker_row_i[1].multiselect("", options=selected_days, default=worker_days_off, key=f"worker_days_off_{i}",
+                                                    help="Select days off, leave empty for no days off", label_visibility="collapsed")
         worker_row_i[2].button("", icon=":material/close:", type="secondary", 
                     key=f"del_worker_{i}", use_container_width=True,
                     on_click=del_worker, args=[i])
         
     else:
         worker_row_i = st.columns([4, 1], vertical_alignment="bottom")
-        worker_name_i = worker_row_i[0].text_input("worker name", value=worker_name, key=f"worker_name_{i}", placeholder="Bob, Alice...", label_visibility="collapsed")
+        worker_name_i = worker_row_i[0].text_input("", value=worker_name, key=f"worker_name_{i}", placeholder="Bob, Alice...", label_visibility="collapsed")
         worker_days_off_i = []
         worker_row_i[1].button("", icon=":material/close:", type="secondary", 
                     key=f"del_worker_{i}", use_container_width=True,
@@ -235,29 +235,8 @@ def display_worker_section():
         
         worker_row1 = st.columns([2, 4], vertical_alignment="center")
 
-        if "with_days_off"in st.session_state:
-            val = st.session_state['with_days_off']
-        else:
-            val = False
-            
-        st.session_state['with_days_off'] = worker_row1[0].toggle("Show days off", value=val,
-                                            help="Include holidays") 
-
-        if st.session_state['with_days_off']:
-            if "balance_daysoff_btn" in st.session_state:
-                default = st.session_state["balance_daysoff_btn"]
-            else:
-                default = "Total days"
-
-            st.session_state['balance_daysoff_btn'] = worker_row1[1].pills("Balance", ["Total days", "Work days"], default=default, 
-                                                help="""On Total days, workers will have to catch up on their vacation days.
-                                                    On Work days, workers will work in proportion of theirs working days.""")
-            if st.session_state['balance_daysoff_btn'] == "Work days":
-                balance_daysoff = True
-            else:
-                balance_daysoff = False
-        else:
-            balance_daysoff = False
+        if 'with_days_off' not in st.session_state:
+            st.session_state['with_days_off'] = True
 
         if "workers" not in st.session_state:
             st.session_state["workers"] = []
@@ -272,6 +251,20 @@ def display_worker_section():
 
         row_add = st.columns([2, 2, 2])
         btn_task = row_add[1].button("Add Worker", icon=":material/add:", type="primary", on_click=add_worker)
+
+        balance_row = st.columns([2, 4])
+        balance_row[0].markdown("**Balance:**")
+        if "balance_daysoff_btn" in st.session_state:
+            default = st.session_state["balance_daysoff_btn"]
+        else:
+            default = "Days off"
+        st.session_state['balance_daysoff_btn'] = balance_row[1].pills("", ["Days off", "Ignore days off"], default=default, label_visibility="collapsed",
+                                            help="""With days off balance, workers will work in proportion of theirs working days.
+                                            With Ignore days off, workers will work in proportion of total days (including their days off).""")
+        if st.session_state['balance_daysoff_btn'] == "Days off":
+            balance_daysoff = True
+        else:
+            balance_daysoff = False
     return balance_daysoff
 
 if True:
@@ -306,12 +299,12 @@ st.markdown("<h2 style='text-align: center;'>Automated Scheduling Tool</h2>", un
 st.header("👋 Welcome to Autrans !")
 
 st.markdown("""
-Autrans is a simple yet powerful tool designed to take the headache out of trip scheduling. <br>
-In just a few clicks, you can define your time range, list your tasks, and assign available workers.<br>
+Autrans is a simple yet powerful tool designed to take the headache out of trip scheduling with your friends. <br>
+In just a few clicks, you can define your time range, list your tasks, and assign available <del>workers</del> people.<br>
 Autrans automatically generates an optimized plan where: <br>
-- Workloads are balanced evenly across workers
-- Each task are performed evenly across workers
-- Worker day-offs are fully respected
+- Each people will have a fair share of the workload
+- Each people will participate to each task
+- <del>Workers</del> People can take days-offs, and the workload will be adjusted accordingly.
  <br>
 """, unsafe_allow_html=True)
 
