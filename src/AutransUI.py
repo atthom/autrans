@@ -48,13 +48,43 @@ def set_df(layout, payload, cols=[], colors=None):
     else:
         layout.dataframe(df, use_container_width=True, hide_index=True)
 
+def make_table(title, columns):
+    st.subheader(title)
+    return st.empty()
 
-def make_table(title, cols):
-    row1 = st.columns([10])
-    row1[0].markdown(f"<h3 style='text-align: center;'>{title}</h3>", unsafe_allow_html=True)
 
-    row2 = st.columns([10])
-    return row2[0].dataframe(pd.DataFrame(columns=cols), hide_index=True, use_container_width=True)
+def make_schedule(placeholder, df, colors):
+    with placeholder.container():
+        # df has columns ["Tasks"] + selected_days
+        # colors is list of colors for each chore
+        st.markdown("""
+        <div style="background-color: rgb(16, 185, 129); padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
+            <h2 style="color: white; margin: 0;">Chore Schedule</h2>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if df.empty:
+            st.markdown("##### Your Schedule is there")
+            return
+        
+        for j, day in enumerate(selected_days):
+            st.markdown(f"<h3 style='color: rgb(16, 185, 129);'>Day {j+1}:</h3>", unsafe_allow_html=True)
+            st.markdown(f"<p style='color: rgb(16, 185, 129);'>{day}</p>", unsafe_allow_html=True)
+            
+            for i in range(len(df)):
+                chore_name = df.iloc[i, 0]
+                assignments = df.iloc[i, j+1]
+                if assignments and str(assignments).strip():
+                    color = colors[i] if i < len(colors) else 'white'
+                    names_list = str(assignments).split(', ')
+                    names_html = '<br>'.join([f"• {name}" for name in names_list])
+                    card_html = f"""
+                    <div style="background-color: {color}; padding: 10px; margin: 5px 0; border-radius: 8px; border: 1px solid #ddd;">
+                        <strong>{chore_name}</strong><br>
+                        {names_html}
+                    </div>
+                    """
+                    st.markdown(card_html, unsafe_allow_html=True)
 
 def update_state(text, i):
     print(text, i)
@@ -140,29 +170,19 @@ def add_worker():
     st.session_state['workers'].append((f"People {max(numbers)+1}", []))
 
 def display_general_settings():
-
     with st.container(border=True):
         header = st.columns([6])
         header[0].markdown("### ⚙️ Settings")
         
         settings_row = st.columns([3, 3, 3], vertical_alignment="center")
         
-        if "trip_name" not in st.session_state:
-            trip_placeholder = "My Trip"
-        else:
-            trip_placeholder = st.session_state["trip_name"]
+        trip_placeholder = st.session_state.get("trip_name", "My Trip")
         st.session_state["trip_name"] = settings_row[0].text_input("Trip Name", value=trip_placeholder, placeholder="Trip Name")
         
-        if "start_date" not in st.session_state:
-            start_date = datetime.date.today()
-        else:
-            start_date = st.session_state["start_date"]
+        start_date = st.session_state.get("start_date", datetime.date.today())
         st.session_state["start_date"] = settings_row[1].date_input("Start Date", value=start_date)
         
-        if "nb_days" not in st.session_state:
-            nb_days = 7
-        else:
-            nb_days = st.session_state["nb_days"]
+        nb_days = st.session_state.get("nb_days", 7)
         st.session_state["nb_days"] = settings_row[2].number_input("Duration (days)", value=nb_days, max_value=20)
         
         # Generate selected_days
@@ -235,8 +255,6 @@ def display_worker_section():
         worker_row = st.columns([6])
         worker_row[0].markdown("#### 👥 Workers")
         
-        worker_row1 = st.columns([2, 4], vertical_alignment="center")
-
         if 'with_days_off' not in st.session_state:
             st.session_state['with_days_off'] = True
 
@@ -258,11 +276,9 @@ def display_worker_section():
 
         balance_row = st.columns([2, 4])
         balance_row[0].markdown("**Balance:**")
-        if "balance_daysoff_btn" in st.session_state:
-            default = st.session_state["balance_daysoff_btn"]
-        else:
-            default = "Days off"
-        st.session_state['balance_daysoff_btn'] = balance_row[1].pills("", ["Days off", "Ignore days off"], default=default, label_visibility="collapsed",
+        default = st.session_state.get("balance_daysoff_btn", "Days off")
+
+        st.session_state['balance_daysoff_btn'] = balance_row[1].pills("balance_daysoff", ["Days off", "Ignore days off"], default=default, label_visibility="collapsed",
                                             help="""With days off balance, workers will work in proportion of theirs working days.
                                             With Ignore days off, workers will work in proportion of total days (including their days off).""")
         if st.session_state['balance_daysoff_btn'] == "Days off":
@@ -342,17 +358,6 @@ with settings.container(border=True):
     submit = row6[1].button("Submit", type="primary", key="submit")
     st.markdown('</div>', unsafe_allow_html=True)
 
- 
-with tables:
-    with st.container(border=True):
-        tabs = st.tabs(["Schedule", "Audit"])
-        with tabs[0]:
-            schedule_display = make_table("Schedule", ["Tasks"] + selected_days)
-        with tabs[1]:
-            schedule_display = make_table("Schedule", ["Tasks"] + selected_days)
-            task_agg = make_table("Affectation per day", ["Days"] + workers)
-            task_per_day_agg = make_table("Affectation per task", ["Tasks"] + workers)
-
 
 if submit:
     all_tasks = []
@@ -404,12 +409,41 @@ if submit:
         
         t_schedule = round(time.time() - t, 2)
 
-        for layout, agg in zip([schedule_display, task_agg, task_per_day_agg], ["display", "time", "jobs"]):
-            if agg == "display":
-                colors = [color for _, _, _, _, _, color in st.session_state['chores']]
-                set_df(layout, all_agg[agg], ["Tasks"] + selected_days, colors=colors)
-            else:
-                set_df(layout, all_agg[agg])
+        colors = [color for _, _, _, _, _, color in st.session_state['chores']]
+        payload_sched = all_agg["display"]
+        data = np.array(payload_sched["columns"]).T
+        df = pd.DataFrame(data, columns=payload_sched["colindex"]["names"])
+        st.session_state['schedule_df'] = df
+        st.session_state['schedule_colors'] = colors
+
+        st.session_state['grid_data'] = all_agg["display"]
+        st.session_state['time_data'] = all_agg["time"]
+        st.session_state['jobs_data'] = all_agg["jobs"]
     else:
         sat_schedule(sat_agg["msg"])
+ 
+
+with tables:
+    with st.container(border=True):
+        tabs = st.tabs(["Schedule", "Grid", "Audit"])
+        with tabs[0]:
+            schedule_placeholder = st.empty()
+            if 'schedule_df' in st.session_state:
+                make_schedule(schedule_placeholder, st.session_state['schedule_df'], st.session_state['schedule_colors'])
+            else:
+                schedule_placeholder.markdown("Your schedule is here")
+        with tabs[1]:
+            schedule_grid = make_table("Schedule", ["Tasks"] + selected_days)
+            if 'grid_data' in st.session_state:
+                set_df(schedule_grid, st.session_state['grid_data'])
+        with tabs[2]:
+            schedule_grid_audit = make_table("Schedule", ["Tasks"] + selected_days)
+            if 'grid_data' in st.session_state:
+                set_df(schedule_grid_audit, st.session_state['grid_data'])
+            task_agg = make_table("Affectation per day", ["Days"] + workers)
+            if 'time_data' in st.session_state:
+                set_df(task_agg, st.session_state['time_data'])
+            task_per_day_agg = make_table("Affectation per task", ["Tasks"] + workers)
+            if 'jobs_data' in st.session_state:
+                set_df(task_per_day_agg, st.session_state['jobs_data'])
         
