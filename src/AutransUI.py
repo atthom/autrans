@@ -8,75 +8,124 @@ import base64
 import json
 import pyperclip
 import time
-
-
+import random
+import datetime
 
 st.set_page_config(page_title="Autrans", page_icon="🧊", layout="wide")
 
-@st.dialog("Schedule is not possible")
-def sat_schedule(txt):
+def generate_pastel_color():
+    r = random.randint(127, 255)
+    g = random.randint(127, 255)
+    b = random.randint(127, 255)
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+def h3_button(txt):
     st.markdown(f"<h3 style='text-align: center'>{txt}</h3>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1,1,1])
     if col2.button("OK", use_container_width=True):
         st.rerun()
+
+
+@st.dialog("Schedule is not possible")
+def sat_schedule(txt):
+    h3_button(txt)
 
 @st.dialog("Setting Error")
 def setting_error(txt):
-    st.markdown(f"<h3 style='text-align: center'>{txt}</h3>", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1,1,1])
-    if col2.button("OK", use_container_width=True):
-        st.rerun()
+    h3_button(txt)
 
-def set_df(layout, payload, cols=[]):
+def set_df(layout, payload, cols=[], colors=None):
     data = np.array(payload["columns"]).T
     df = pd.DataFrame(data, columns=payload["colindex"]["names"])
     if cols != []:
         df.columns = cols
-    layout = layout.dataframe(df, use_container_width=True, hide_index=True)
+    if colors:
+        def color_row(row):
+            color = colors[row.name] if row.name < len(colors) else 'white'
+            return [f'background-color: {color}'] * len(row)
+        styled_df = df.style.apply(color_row, axis=1)
+        layout.dataframe(styled_df, use_container_width=True, hide_index=True)
+    else:
+        layout.dataframe(df, use_container_width=True, hide_index=True)
+
+def make_table(title, columns):
+    st.subheader(title)
+    return st.empty()
 
 
-def make_table(title, cols):
-    row1 = st.columns([10])
-    row1[0].markdown(f"<h3 style='text-align: center;'>{title}</h3>", unsafe_allow_html=True)
+def make_schedule(placeholder, df, colors):
+    with placeholder.container():
+        # df has columns ["Tasks"] + selected_days
+        # colors is list of colors for each chore
+        st.markdown("""
+        <div style="background-color: rgb(16, 185, 129); padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
+            <h2 style="color: white; margin: 0;">Chore Schedule</h2>
+        </div>
+        """, unsafe_allow_html=True)
 
-    row2 = st.columns([10])
-    return row2[0].dataframe(pd.DataFrame(columns=cols), hide_index=True, use_container_width=True)
+        if df.empty:
+            st.markdown("##### Your Schedule is there")
+            return
+        
+        start_date = st.session_state["start_date"]
+        dates = [start_date + datetime.timedelta(days=i) for i in range(st.session_state["nb_days"])]
+        
+        for j, day in enumerate(selected_days):
+            date_str = dates[j].strftime('%d/%m/%Y')
+            with st.container():
+                st.markdown(f"<h4 style='color: rgb(16, 185, 129);'>{date_str} - {day} - Day {j+1}</h4>", unsafe_allow_html=True)
+                
+                for i in range(len(df)):
+                    chore_name = df.iloc[i, 0]
+                    assignments = df.iloc[i, j+1]
+                    if assignments and str(assignments).strip():
+                        color = colors[i] if i < len(colors) else 'white'
+                        names_list = str(assignments).split(', ')
+                        names_html = '<br>'.join(names_list)
+                        card_html = f"""
+                        <div style="background-color: {color}; padding: 10px; margin: 5px 0; border-radius: 8px; border: 1px solid #ddd; padding-left: 20px;">
+                            <strong>{chore_name}</strong><br>
+                            {names_html}
+                        </div>
+                        """
+                        st.markdown(card_html, unsafe_allow_html=True)
 
 def update_state(text, i):
     print(text, i)
-    print(st.session_state[f"task_name_{i}"])
+    print(st.session_state[f"chore_name_{i}"])
 
-def display_task(task_name, nb_worker, i, with_range=False):
-    task_row_i = st.columns([3, 3, 1], vertical_alignment='bottom')
-    task_name_i = task_row_i[0].text_input(f"Task name", value=task_name, key=f"task_name_{i}",
-                                            help="Name of the task")
-    nb_worker_i = task_row_i[1].number_input("People required", value=nb_worker, key=f"task_workers_{i}",
-                                            help="Number of people needed to complete the task")
+def display_chore(chore_name, nb_worker, color, i, with_range=False):
+    chore_row_i = st.columns([2, 2, 2, 1], vertical_alignment='bottom')
+    chore_name_i = chore_row_i[0].text_input(f"name", value=chore_name, key=f"chore_name_{i}", label_visibility="collapsed",
+                                            help="Name of the chore")
+    nb_worker_i = chore_row_i[1].number_input("number of worker", value=nb_worker, key=f"chore_workers_{i}",
+                                            help="Number of people needed to complete the chore", label_visibility="collapsed")
+    color_i = chore_row_i[2].color_picker("color", value=color, key=f"chore_color_{i}",
+                                         help="Choose a color for this chore", label_visibility="collapsed")
     
-    task_row_i[2].button("", icon=":material/close:", type="secondary", 
-                        key=f"del_task_{i}", use_container_width=True,
-                        on_click=del_task, args=[i])
+    chore_row_i[3].button("", icon=":material/close:", type="secondary", 
+                        key=f"del_chore_{i}", use_container_width=True,
+                        on_click=del_chore, args=[i])
     if with_range:
-        task_start, task_end = st.select_slider("Select a range of days for the task", options=selected_days,
-                                            value=(0, len(selected_days)-1), key=f"task_skip_{i}")
+        chore_start, chore_end = st.slider("chore range", 0, len(selected_days)-1, (0, len(selected_days)-1), key=f"chore_range_{i}", label_visibility="collapsed")
     else:
-        task_start, task_end = 0, len(selected_days)-1
-    return task_name_i, nb_worker_i, task_start, task_end
+        chore_start, chore_end = 0, len(selected_days)-1
+    return chore_name_i, nb_worker_i, color_i, chore_start, chore_end
 
 def display_worker(worker_name, worker_days_off, i):
     if st.session_state['with_days_off']:
         worker_row_i = st.columns([2, 3, 1], vertical_alignment="bottom")
         
-        worker_name_i = worker_row_i[0].text_input(f"Name", value=worker_name, key=f"worker_name_{i}")
-        worker_days_off_i = worker_row_i[1].multiselect("Days off", options=selected_days, default=worker_days_off, key=f"worker_days_off_{i}",
-                                                    help="Select on which days this person will not be working")
+        worker_name_i = worker_row_i[0].text_input(f"worker name {i}", value=worker_name, key=f"worker_name_{i}", placeholder="name", label_visibility="collapsed")
+        worker_days_off_i = worker_row_i[1].multiselect(f"days_off{i}", options=selected_days, default=worker_days_off, key=f"worker_days_off_{i}",
+                                                    help="Select days off, leave empty for no days off", placeholder="days off", label_visibility="collapsed")
         worker_row_i[2].button("", icon=":material/close:", type="secondary", 
                     key=f"del_worker_{i}", use_container_width=True,
                     on_click=del_worker, args=[i])
         
     else:
         worker_row_i = st.columns([4, 1], vertical_alignment="bottom")
-        worker_name_i = worker_row_i[0].text_input(f"Name", value=worker_name, key=f"worker_name_{i}")
+        worker_name_i = worker_row_i[0].text_input(f"worker name {i}", value=worker_name, key=f"worker_name_{i}", placeholder="name", label_visibility="collapsed")
         worker_days_off_i = []
         worker_row_i[1].button("", icon=":material/close:", type="secondary", 
                     key=f"del_worker_{i}", use_container_width=True,
@@ -91,20 +140,21 @@ def del_state_list(key, error_msg, i):
     else:
         st.session_state[key] = [t for (j, t) in enumerate(st.session_state[key]) if j != i]
 
-def del_task(i):
-    del_state_list("tasks", "Cannot delete the last task", i)
+def del_chore(i):
+    del_state_list("chores", "Cannot delete the last chore", i)
 
 def del_worker(i):
     del_state_list("workers",  "Cannot delete the last worker", i)
 
-def add_task(): 
-    print("add_task")
+def add_chore(): 
+    print("add_chore")
     
-    if len(st.session_state['tasks']) > 20:
-        setting_error("Limit of 20 tasks reached.")
+    if len(st.session_state['chores']) > 20:
+        setting_error("Limit of 20 chores reached.")
     
-    i = len(st.session_state['tasks'])
-    st.session_state['tasks'].append((f"Task {i+1}", 2, 1, selected_days[0], selected_days[-1]))
+    i = len(st.session_state['chores'])
+    color = generate_pastel_color()
+    st.session_state['chores'].append((f"Chore {i+1}", 2, 1, 0, st.session_state["nb_days"] - 1, color))
 
 def add_worker(): 
     print("add_worker")
@@ -124,74 +174,57 @@ def add_worker():
     st.session_state['workers'].append((f"People {max(numbers)+1}", []))
 
 def display_general_settings():
-    header = st.columns([6])
-    header[0].header("Settings")
-    st.divider()
-
-    settings_row1 = st.columns([2, 4, 2], vertical_alignment="center")
-    if "nb_days" not in st.session_state:
-        base_value = 7
-    else:
-        base_value = st.session_state["nb_days"]
-    st.session_state["nb_days"] = settings_row1[0].number_input("Number of days", value=base_value, max_value=20,
-                                            help="Number of days for the planning")
-    
-    if "weekday_display" not in st.session_state:
-    #weekday_display = settings_row1[1].toggle("Days of the week", value=False, help="Display planning with days of the week")
-        default = "Numbers"
-    else:
-        default = st.session_state["weekday_display"]
-    
-    st.session_state["weekday_display"] = settings_row1[1].pills("Display Settings", ["Numbers", "Days of the week"], default=default, 
-                                             selection_mode="single", help="Display planning with days of the week")
-    
-    if st.session_state["weekday_display"] == "Days of the week":
-        if "start_with" in st.session_state:
-            pl = st.session_state["start_with"]
-        else:
-            pl = "Monday"
-        st.session_state["start_with"] = settings_row1[2].selectbox("Start with", placeholder=pl, options=weekdays,
-                                                help="Start planning with a specific day")
-        startday = weekdays.index(st.session_state["start_with"])
-        selected_days = [(weekdays[(startday+i)%7], (startday+i) // 7) for i in range(st.session_state["nb_days"])]
-        multiple_week = any(i>=1 for w, i in selected_days)
-
-        if multiple_week:
-            selected_days = [d + f" (W {1+i})" for d, i in selected_days]
-        else:
-            selected_days = [d for d, i in selected_days]
-    else:
-        selected_days = [f"Day {i+1}" for i in range(st.session_state["nb_days"])]
+    with st.container(border=True):
+        header = st.columns([6])
+        header[0].markdown("### ⚙️ Settings")
+        
+        settings_row = st.columns([3, 3, 3], vertical_alignment="center")
+        
+        trip_placeholder = st.session_state.get("trip_name", "My Trip")
+        st.session_state["trip_name"] = settings_row[0].text_input("Trip Name", value=trip_placeholder, placeholder="Trip Name")
+        
+        start_date = st.session_state.get("start_date", datetime.date.today())
+        st.session_state["start_date"] = settings_row[1].date_input("Start Date", value=start_date)
+        
+        nb_days = st.session_state.get("nb_days", 7)
+        st.session_state["nb_days"] = settings_row[2].number_input("Duration (days)", value=nb_days, max_value=20)
+        
+        # Generate selected_days
+        dates = [st.session_state["start_date"] + datetime.timedelta(days=i) for i in range(st.session_state["nb_days"])]
+        week_numbers = [(d - st.session_state["start_date"]).days // 7 for d in dates]
+        selected_days = [f"{d.strftime('%A')} (W {1 + w})" if w > 0 else d.strftime("%A") for d, w in zip(dates, week_numbers)]
     return st.session_state["nb_days"], selected_days 
 
-def display_task_section():
-    task_row = st.columns([6]) 
-    task_row[0].header("Tasks")
+def display_chores_section():
+    with st.container(border=True):
+        chore_row = st.columns([6]) 
+        chore_row[0].markdown("#### 🧹 Chores")
 
-    if 'tasks' not in st.session_state:
-        st.session_state['tasks'] = []
-        default_task_nb = 3
+        show_ranges = st.toggle("Show ranges", value=False, help="Show day range selectors for each chore")
 
-        for i in range(default_task_nb):
-            task_name_i, nb_worker_i, task_start_i, task_end_i = display_task(f"Task {i+1}", 2, i)
-            st.session_state['tasks'].append((task_name_i, nb_worker_i, 1, task_start_i, task_end_i))
-    else:   
-        for (i, (task_name_i, nb_worker_i, _, _, _)) in enumerate(st.session_state['tasks']):
-            task_name_i, nb_worker_i, task_start_i, task_end_i = display_task(task_name_i, 2, i)
+        if 'chores' not in st.session_state:
+            st.session_state['chores'] = []
+            default_chore_nb = 3
 
-    row_add = st.columns([2, 2, 2])
-    btn_task = row_add[1].button("Add Task", icon=":material/add:", type="primary", key="btn_add_task", on_click=add_task)
+            for i in range(default_chore_nb):
+                color = generate_pastel_color()
+                chore_name_i, nb_worker_i, color_i, chore_start_i, chore_end_i = display_chore(f"Chore {i+1}", 2, color, i, with_range=show_ranges)
+                st.session_state['chores'].append((chore_name_i, nb_worker_i, 1, chore_start_i, chore_end_i, color_i))
+        else:   
+            for (i, (chore_name_i, nb_worker_i, _, _, _, color)) in enumerate(st.session_state['chores']):
+                chore_name_i, nb_worker_i, color_i, chore_start_i, chore_end_i = display_chore(chore_name_i, nb_worker_i, color, i, with_range=show_ranges)
+                st.session_state['chores'][i] = (chore_name_i, nb_worker_i, 1, chore_start_i, chore_end_i, color_i)
 
-    task_per_day, _, _, _, _ = zip(*st.session_state['tasks'])
+        row_add = st.columns([2, 2, 2])
+        st.markdown('<div class="action-button">', unsafe_allow_html=True)
+        btn_chore = row_add[1].button("Add Chore", icon=":material/add:", type="primary", key="btn_add_chore", on_click=add_chore)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    st.session_state[f"task_names"] = [st.session_state[f"task_name_{i}"] for i in range(len(st.session_state['tasks']))]
+        task_per_day, _, _, _, _, _ = zip(*st.session_state['chores'])
 
-    st.session_state['first_day_tasks'] = st.multiselect("Tasks on First Day", options=st.session_state[f"task_names"], default=st.session_state[f"task_names"], 
-                                                key=f"first_day_tasks{i}", help="Sometimes the first day have less tasks")
-    st.session_state['last_day_tasks'] = st.multiselect("Tasks on Last Day", options=st.session_state[f"task_names"], default=st.session_state[f"task_names"],
-                                                key=f"last_day_tasks{i}", help="Sometimes the first day have less tasks")
-    
-    return task_per_day
+        st.session_state[f"chore_names"] = [st.session_state[f"chore_name_{i}"] for i in range(len(st.session_state['chores']))]
+
+        return task_per_day
 
 
 def on_save_state():
@@ -222,51 +255,43 @@ def on_load_state(state):
         st.session_state[k] = v
 
 def display_worker_section():
-    worker_row = st.columns([6])
-    worker_row[0].header("Workers")
-    
-    worker_row1 = st.columns([2, 4], vertical_alignment="center")
-
-    if "with_days_off"in st.session_state:
-        val = st.session_state['with_days_off']
-    else:
-        val = False
+    with st.container(border=True):
+        worker_row = st.columns([6])
+        worker_row[0].markdown("#### 👥 Workers")
         
-    st.session_state['with_days_off'] = worker_row1[0].toggle("Add days off", value=val,
-                                          help="Include holidays") 
+        if 'with_days_off' not in st.session_state:
+            st.session_state['with_days_off'] = True
 
-    if st.session_state['with_days_off']:
-        if "balance_daysoff_btn" in st.session_state:
-            default = st.session_state["balance_daysoff_btn"]
+        if "workers" not in st.session_state:
+            st.session_state["workers"] = []
+            default_nb_worker = 4
+
+            for i in range(default_nb_worker):
+                worker_name_i, worker_days_off_i = display_worker(f"Person {i+1}", [], i)
+                st.session_state["workers"].append((worker_name_i, worker_days_off_i))
         else:
-            default = "Total days"
+            for (i, (worker_name_i, worker_days_off_i)) in enumerate(st.session_state["workers"]):
+                worker_name_i, worker_days_off_i = display_worker(worker_name_i, worker_days_off_i, i)
 
-        st.session_state['balance_daysoff_btn'] = worker_row1[1].pills("Balance", ["Total days", "Work days"], default=default, 
-                                            help="""On Total days, workers will have to catch up on their vacation days.
-                                                On Work days, workers will work in proportion of theirs working days.""")
-        if st.session_state['balance_daysoff_btn'] == "Work days":
+        row_add = st.columns([2, 2, 2])
+        st.markdown('<div class="action-button">', unsafe_allow_html=True)
+        btn_task = row_add[1].button("Add Worker", icon=":material/add:", type="primary", on_click=add_worker)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        balance_row = st.columns([2, 4])
+        balance_row[0].markdown("**Balance:**")
+        default = st.session_state.get("balance_daysoff_btn", "Days off")
+
+        st.session_state['balance_daysoff_btn'] = balance_row[1].pills("balance_daysoff", ["Days off", "Ignore days off"], default=default, label_visibility="collapsed",
+                                            help="""With days off balance, workers will work in proportion of theirs working days.
+                                            With Ignore days off, workers will work in proportion of total days (including their days off).""")
+        if st.session_state['balance_daysoff_btn'] == "Days off":
             balance_daysoff = True
         else:
             balance_daysoff = False
-    else:
-        balance_daysoff = False
-
-    if "workers" not in st.session_state:
-        st.session_state["workers"] = []
-        default_nb_worker = 4
-
-        for i in range(default_nb_worker):
-            worker_name_i, worker_days_off_i = display_worker(f"Person {i+1}", [], i)
-            st.session_state["workers"].append((worker_name_i, worker_days_off_i))
-    else:
-        for (i, (worker_name_i, worker_days_off_i)) in enumerate(st.session_state["workers"]):
-            worker_name_i, worker_days_off_i = display_worker(worker_name_i, worker_days_off_i, i)
-
-    row_add = st.columns([2, 2, 2])
-    btn_task = row_add[1].button("Add Worker", icon=":material/add:", type="primary", on_click=add_worker)
     return balance_daysoff
 
-if False:
+if True:
     st.markdown("""
         <style>
             .reportview-container {
@@ -276,6 +301,15 @@ if False:
             .stDeployButton {display:none;}
             footer {visibility: hidden;}
             #stDecoration {display:none;}
+            .action-button .stButton button {
+                background-color: #28a745 !important;
+                color: white !important;
+                border-color: #28a745 !important;
+            }
+            .action-button .stButton button:hover {
+                background-color: #218838 !important;
+                border-color: #218838 !important;
+            }
         </style>
     """, unsafe_allow_html=True)
 
@@ -285,12 +319,12 @@ st.markdown("<h2 style='text-align: center;'>Automated Scheduling Tool</h2>", un
 st.header("👋 Welcome to Autrans !")
 
 st.markdown("""
-Autrans is a simple yet powerful tool designed to take the headache out of team scheduling. <br>
-In just a few clicks, you can define your time range, list your tasks, and assign available workers.<br>
+Autrans is a simple yet powerful tool designed to take the headache out of trip scheduling with your friends. <br>
+In just a few clicks, you can define your time range, list your tasks, and assign available <del>workers</del> people.<br>
 Autrans automatically generates an optimized plan where: <br>
-- Workloads are balanced evenly across workers
-- Each task are performed evenly across workers
-- Worker day-offs are fully respected
+- Each people will have a fair share of the workload
+- Each people will participate to each task
+- <del>Workers</del> People can take days-offs, and the workload will be adjusted accordingly.
  <br>
 """, unsafe_allow_html=True)
 
@@ -302,66 +336,49 @@ with settings.container(border=True):
 
     nb_days, selected_days = display_general_settings()
 
-    st.divider()
-
-    task_per_day = display_task_section()
-
-    st.divider()
+    chore_per_day = display_chores_section()
 
     balance_daysoff = display_worker_section()
     
     workers, _ = zip(*st.session_state["workers"])
     workers = list(workers)
+    
+    with st.container(border=True):
+        row4 = st.text_input("State Input")
+        row5 = st.columns([2, 2, 2])
+        row7 = st.columns([2, 2, 2])
 
-    st.divider()
+        load_state = row5[2].button("Load State", type="secondary", key="load_state", 
+                                    on_click= lambda : on_load_state(str(row4)))
 
-    row4 = st.text_input("State Input")
-    row5 = st.columns([2, 2, 2])
-    row7 = st.columns([2, 2, 2])
+        save_state = row5[0].button("Copy State", type="secondary", key="save_state", 
+                                    on_click=on_save_state)
 
-    load_state = row5[2].button("Load State", type="secondary", key="load_state", 
-                                on_click= lambda : on_load_state(str(row4)))
-
-    save_state = row5[0].button("Copy State", type="secondary", key="save_state", 
-                                on_click=on_save_state)
-
-    if save_state:
-        row7[0].badge("Copied to Clipboard", icon=":material/check:", color="green")
+        if save_state:
+            row7[0].badge("Copied to Clipboard", icon=":material/check:", color="green")
 
     row6 = st.columns([2, 2, 2])
+    st.markdown('<div class="action-button">', unsafe_allow_html=True)
     submit = row6[1].button("Submit", type="primary", key="submit")
-
-
- 
-with tables:
-    schedule_display = make_table("Schedule", ["Tasks"] + selected_days)
-    task_agg = make_table("Affectation per day", ["Days"] + workers)
-    task_per_day_agg = make_table("Affectation per task", ["Tasks"] + workers)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 if submit:
     all_tasks = []
 
-    st.session_state[f"task_names"] = [st.session_state[f"task_name_{i}"] for i in range(len(st.session_state['tasks']))]
+    st.session_state[f"chore_names"] = [st.session_state[f"chore_name_{i}"] for i in range(len(st.session_state['chores']))]
 
-    for i, (task_name, nb_people, difficulty, name_start, name_end) in enumerate(st.session_state["tasks"]):
+    for i, (chore_name, nb_people, difficulty, name_start, name_end, color) in enumerate(st.session_state["chores"]):
         #print(selected_days, name_start)
-        task_name = st.session_state[f"task_name_{i}"]
-        nb_people = st.session_state[f"task_workers_{i}"]
+        chore_name = st.session_state[f"chore_name_{i}"]
+        nb_people = st.session_state[f"chore_workers_{i}"]
         #start = selected_days.index(name_start) +1
         #end = selected_days.index(name_end) +1
         
-        start = 1
-        end = len(selected_days)
-        #print(task_name, st.session_state["first_day_tasks"])
-        if task_name not in st.session_state["first_day_tasks"]:
-            print(task_name)
-            start += 1
+        start = name_start + 1
+        end = name_end + 1
         
-        if task_name not in st.session_state["last_day_tasks"]:
-            end -= 1
-        
-        all_tasks.append((task_name, nb_people, difficulty, start, end))
+        all_tasks.append((chore_name, nb_people, difficulty, start, end))
 
     workers = []
     for i in range(len(st.session_state["workers"])):
@@ -396,11 +413,41 @@ if submit:
         
         t_schedule = round(time.time() - t, 2)
 
-        for layout, agg in zip([schedule_display, task_agg, task_per_day_agg], ["display", "time", "jobs"]):
-            if agg == "display":
-                set_df(layout, all_agg[agg], ["Tasks"] + selected_days)
-            else:
-                set_df(layout, all_agg[agg])
+        colors = [color for _, _, _, _, _, color in st.session_state['chores']]
+        payload_sched = all_agg["display"]
+        data = np.array(payload_sched["columns"]).T
+        df = pd.DataFrame(data, columns=payload_sched["colindex"]["names"])
+        st.session_state['schedule_df'] = df
+        st.session_state['schedule_colors'] = colors
+
+        st.session_state['grid_data'] = all_agg["display"]
+        st.session_state['time_data'] = all_agg["time"]
+        st.session_state['jobs_data'] = all_agg["jobs"]
     else:
         sat_schedule(sat_agg["msg"])
+ 
+
+with tables:
+    with st.container(border=True):
+        tabs = st.tabs(["Schedule", "Grid", "Audit"])
+        with tabs[0]:
+            schedule_placeholder = st.empty()
+            if 'schedule_df' in st.session_state:
+                make_schedule(schedule_placeholder, st.session_state['schedule_df'], st.session_state['schedule_colors'])
+            else:
+                schedule_placeholder.markdown("Your schedule is here")
+        with tabs[1]:
+            schedule_grid = make_table("Schedule", ["Tasks"] + selected_days)
+            if 'grid_data' in st.session_state:
+                set_df(schedule_grid, st.session_state['grid_data'])
+        with tabs[2]:
+            schedule_grid_audit = make_table("Schedule", ["Tasks"] + selected_days)
+            if 'grid_data' in st.session_state:
+                set_df(schedule_grid_audit, st.session_state['grid_data'])
+            task_agg = make_table("Affectation per day", ["Days"] + workers)
+            if 'time_data' in st.session_state:
+                set_df(task_agg, st.session_state['time_data'])
+            task_per_day_agg = make_table("Affectation per task", ["Tasks"] + workers)
+            if 'jobs_data' in st.session_state:
+                set_df(task_per_day_agg, st.session_state['jobs_data'])
         
