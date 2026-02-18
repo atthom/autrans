@@ -67,24 +67,28 @@ def make_schedule(placeholder, df, colors):
             st.markdown("##### Your Schedule is there")
             return
         
+        start_date = st.session_state["start_date"]
+        dates = [start_date + datetime.timedelta(days=i) for i in range(st.session_state["nb_days"])]
+        
         for j, day in enumerate(selected_days):
-            st.markdown(f"<h3 style='color: rgb(16, 185, 129);'>Day {j+1}:</h3>", unsafe_allow_html=True)
-            st.markdown(f"<p style='color: rgb(16, 185, 129);'>{day}</p>", unsafe_allow_html=True)
-            
-            for i in range(len(df)):
-                chore_name = df.iloc[i, 0]
-                assignments = df.iloc[i, j+1]
-                if assignments and str(assignments).strip():
-                    color = colors[i] if i < len(colors) else 'white'
-                    names_list = str(assignments).split(', ')
-                    names_html = '<br>'.join([f"• {name}" for name in names_list])
-                    card_html = f"""
-                    <div style="background-color: {color}; padding: 10px; margin: 5px 0; border-radius: 8px; border: 1px solid #ddd;">
-                        <strong>{chore_name}</strong><br>
-                        {names_html}
-                    </div>
-                    """
-                    st.markdown(card_html, unsafe_allow_html=True)
+            date_str = dates[j].strftime('%d/%m/%Y')
+            with st.container():
+                st.markdown(f"<h4 style='color: rgb(16, 185, 129);'>{date_str} - {day} - Day {j+1}</h4>", unsafe_allow_html=True)
+                
+                for i in range(len(df)):
+                    chore_name = df.iloc[i, 0]
+                    assignments = df.iloc[i, j+1]
+                    if assignments and str(assignments).strip():
+                        color = colors[i] if i < len(colors) else 'white'
+                        names_list = str(assignments).split(', ')
+                        names_html = '<br>'.join(names_list)
+                        card_html = f"""
+                        <div style="background-color: {color}; padding: 10px; margin: 5px 0; border-radius: 8px; border: 1px solid #ddd; padding-left: 20px;">
+                            <strong>{chore_name}</strong><br>
+                            {names_html}
+                        </div>
+                        """
+                        st.markdown(card_html, unsafe_allow_html=True)
 
 def update_state(text, i):
     print(text, i)
