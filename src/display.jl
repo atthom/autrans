@@ -1,81 +1,93 @@
+using DataFrames, Printf
 
-function display_schedule(scheduler, schedule)
-    println("Jobs")
-    println(agg_jobs(scheduler, schedule))
-    println("Task Type Diversity")
-    println(agg_type(scheduler, schedule))
-    println("Time Diversity")
-    println(agg_time(scheduler, schedule))
-    println("Final Display")
-    println(agg_display(scheduler, schedule))
-end
-
-function agg_jobs(scheduler::Scheduler, schedule)
-    tasks_agg = DataFrame(Tasks=[t.name for t in scheduler.tasks_per_day])
-    nb_jobs = length(scheduler.tasks_per_day)
+function print_schedule(schedule::Array{Int, 3}, scheduler::AutransScheduler)
+    N, D, T = size(schedule)
+    task_names = [task.name for task in scheduler.tasks]
+    day_cols = [String[] for _ in 1:scheduler.num_days]
     
-    for id_worker in 1:length(scheduler.workers)
-        jobs = findall(x -> x==1, schedule[:, id_worker])
-        jobs = (jobs .+ 0) .% nb_jobs
-        jobs = countmap(jobs)
-        jobs = DefaultDict(0, jobs) 
-        jobs[nb_jobs] = jobs[0]
-        tasks_agg[!, scheduler.workers[id_worker].name] = [jobs[i] for i in 1:nb_jobs]
-    end
-
-    push!(tasks_agg, vcat("Total", sum(schedule, dims=1)...))
-    return tasks_agg
-end
-
-function agg_type(scheduler::Scheduler, schedule)
-    names = [w.name for w in scheduler.workers]
-
-    @chain schedule begin
-        agg_jobs(scheduler, _)
-        groupby(_, :Tasks)
-        combine(_, names .=> sum)
-        rename(_, vcat(["Tasks"], names))
-    end
-end
-
-
-function agg_time(scheduler::Scheduler, schedule)
-    names = [w.name for w in scheduler.workers]
-    days = DataFrame(Days=["Day $i" for i in 1:scheduler.days])
-
-    @chain scheduler.daily_indices begin
-        [sum(schedule[day, :], dims=1) for day in _]
-        vcat(_...)
-        DataFrame(_, names)
-        hcat(days, _)
-        push!(_, vcat("Total", sum(schedule, dims=1)...))
-    end
-end
-
-function agg_display(scheduler::Scheduler, schedule)
-    tasks_agg = DataFrame(Tasks=[t.name for t in scheduler.tasks_per_day])
-    nb_jobs = length(scheduler.tasks_per_day)
-    for i in 1:scheduler.days
-        tasks_agg[!, "Day $i"] = repeat([""], nb_jobs)
-    end
-
-    for (i_day, day) in enumerate(scheduler.daily_indices)
-        one_day = Vector{String}()
-        for (task, indices) in scheduler.tasks_indices_per_day
-            daily_task = [i for i in indices if i in day]
-
-            if length(daily_task) == 1
-                daily_task = daily_task[1]
-                w_ids = findall(x -> x==1, schedule[daily_task, :])
-                w_names = [scheduler.workers[i].name for i in w_ids]
-                w_names = join(w_names, ", ", " and ")
-            else
-                w_names = ""
-            end
-
-            push!(one_day, w_names)
+    for d in 1:scheduler.num_days, (t, task) in enumerate(scheduler.tasks)
+        if d ∈ task.day_range
+            workers_assigned = [scheduler.workers[w].name for w in 1:N if schedule[w, d, t] == 1]
+            push!(day_cols[d], isempty(workers_assigned) ? "-" : join(workers_assigned, ", "))
+        else
+            push!(day_cols[d], "-")
         end
-        tasks_agg[!, "Day $(i_day)"] = one_day
     end
-    return tasks_agg
+    
+    df = DataFrame(Task = task_names)
+    for d in 1:scheduler.num_days
+        df[!, "Day $d"] = day_cols[d]
+    end
+    
+    println("\n", "="^100, "\nSCHEDULE: Tasks × Days\n", "="^100)
+    println(df)
 end
+
+function print_debug_tasks_workers(schedule::Array{Int, 3}, scheduler::AutransScheduler)
+    N, D, T = size(schedule)
+    task_names = [task.name for task in scheduler.tasks]
+    push!(task_names, "TOTAL")
+    
+    worker_cols = [String[] for _ in 1:N]
+    for w in 1:N, t in 1:T
+        count = sum(schedule[w, d, t] for d in 1:D)
+        has_day_off = any(d in scheduler.workers[w].days_off for d in scheduler.tasks[t].day_range if d <= D)
+        push!(worker_cols[w], has_day_off ? "$count*" : "$count")
+    end
+    
+    for w in 1:N
+        total = sum(schedule[w, :, :])
+        has_any_day_off = !isempty(scheduler.workers[w].days_off ∩ Set(1:D))
+        push!(worker_cols[w], has_any_day_off ? "$total*" : "$total")
+    end
+    
+    total_col = [string(sum(schedule[:, :, t])) for t in 1:T]
+    push!(total_col, string(sum(schedule)))
+    
+    df = DataFrame(Task = task_names)
+    for (w, worker) in enumerate(scheduler.workers)
+        df[!, worker.name] = worker_cols[w]
+    end
+    df[!, "TOTAL"] = total_col
+    
+    println("\n", "="^100, "\nDEBUG: Tasks × Workers (Total assignments across all days)\n", "="^100)
+    println(df)
+end
+
+function print_debug_days_workers(schedule::Array{Int, 3}, scheduler::AutransScheduler)
+    N, D, T = size(schedule)
+    day_names = ["Day $d" for d in 1:scheduler.num_days]
+    push!(day_names, "TOTAL")
+    
+    worker_cols = [String[] for _ in 1:N]
+    for w in 1:N, d in 1:scheduler.num_days
+        count = sum(schedule[w, d, t] for t in 1:T)
+        is_day_off = d in scheduler.workers[w].days_off
+        push!(worker_cols[w], is_day_off ? "$count*" : "$count")
+    end
+    
+    for w in 1:N
+        total = sum(schedule[w, :, :])
+        has_any_day_off = !isempty(scheduler.workers[w].days_off ∩ Set(1:D))
+        push!(worker_cols[w], has_any_day_off ? "$total*" : "$total")
+    end
+    
+    total_col = [string(sum(schedule[:, d, :])) for d in 1:scheduler.num_days]
+    push!(total_col, string(sum(schedule)))
+    
+    df = DataFrame(Day = day_names)
+    for (w, worker) in enumerate(scheduler.workers)
+        df[!, worker.name] = worker_cols[w]
+    end
+    df[!, "TOTAL"] = total_col
+    
+    println("\n", "="^100, "\nDEBUG: Days × Workers (Tasks per day per worker)\n", "="^100)
+    println(df)
+end
+
+function print_all(schedule, scheduler::AutransScheduler)
+    print_schedule(schedule, scheduler)
+    print_debug_tasks_workers(schedule, scheduler)
+    print_debug_days_workers(schedule, scheduler)
+end
+

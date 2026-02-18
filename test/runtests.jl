@@ -1,9 +1,7 @@
-using Revise 
 using Test
 using Autrans
-using Chain
-
-using BenchmarkTools
+# using Chain
+# using BenchmarkTools
 
 
 function make_simple_payload(nb_days, nb_tasks, nb_workers, nb_worker_per_task)
@@ -31,68 +29,68 @@ function make_complex_payload(nb_days_worker, nb_tasks, nb_worker_per_task, bala
 end
 
 function seed_opti(payload)
-    scheduler = Scheduler(payload)
-    @test check_satisfability(scheduler) == (true, "OK")
-    seed = permutations_seed(scheduler)
-    res = solve(scheduler)
+    scheduler = Autrans.Scheduler(payload)
+    @test Autrans.check_satisfability(scheduler) == (true, "OK")
+    seed = Autrans.permutations_seed(scheduler)
+    res = Autrans.solve(scheduler)
     return scheduler, seed, res
 end
 
 @testset "impossible_payload" begin
     payload = make_simple_payload(10, 10, 1, 2)
-    scheduler = Scheduler(payload)
-    @test check_satisfability(scheduler) == (false, "Not enough worker for task Task 1 on day 1")
+    scheduler = Autrans.Scheduler(payload)
+    @test Autrans.check_satisfability(scheduler) == (false, "Not enough worker for task Task 1 on day 1")
     
     payload = make_simple_payload(6, 2, 2, 2)
     payload["workers"][2] = ("Worker 2",  [2, 3, 4])
-    @test check_satisfability(scheduler) == (false, "Not enough worker for task Task 1 on day 1")
+    @test Autrans.check_satisfability(scheduler) == (false, "Not enough worker for task Task 1 on day 1")
 
 end
 
 @testset "perfect_payload" begin
     payload = make_simple_payload(10, 10, 2, 1)
     scheduler, seed, res = seed_opti(payload)
-    @test fitness(scheduler, seed)  == fitness(scheduler, res) == 0
+    @test Autrans.fitness(scheduler, seed)  == Autrans.fitness(scheduler, res) == 0
     payload = make_simple_payload(10, 10, 2, 2)
     scheduler, seed, res = seed_opti(payload)
-    @test fitness(scheduler, seed) == fitness(scheduler, res) == 0
+    @test Autrans.fitness(scheduler, seed) == Autrans.fitness(scheduler, res) == 0
 
     payload = make_simple_payload(3, 2, 3, 1)
     scheduler, seed, res = seed_opti(payload)
-    @test fitness(scheduler, res) == fitness(scheduler, seed) == 3
+    @test Autrans.fitness(scheduler, res) == Autrans.fitness(scheduler, seed) == 3
 
     payload = make_simple_payload(2, 2, 2, 1)
     scheduler, seed, res = seed_opti(payload)
-    @test fitness(scheduler, res) == fitness(scheduler, seed) == 0
+    @test Autrans.fitness(scheduler, res) == Autrans.fitness(scheduler, seed) == 0
     
     payload = make_simple_payload(4, 2, 4, 1)
     scheduler, seed, res = seed_opti(payload)
-    @test fitness(scheduler, res) == fitness(scheduler, seed) == 4
+    @test Autrans.fitness(scheduler, res) == Autrans.fitness(scheduler, seed) == 4
 
     payload = make_simple_payload(4, 2, 4, 2)
     scheduler, seed, res = seed_opti(payload)
-    @test fitness(scheduler, res) == fitness(scheduler, seed) == 0
+    @test Autrans.fitness(scheduler, res) == Autrans.fitness(scheduler, seed) == 0
 
     payload = make_simple_payload(2, 2, 2, 1)
     scheduler, seed, res = seed_opti(payload)
-    @test fitness(scheduler, res) == fitness(scheduler, seed) == 0
+    @test Autrans.fitness(scheduler, res) == Autrans.fitness(scheduler, seed) == 0
 
     payload = make_simple_payload(3, 3, 3, 1)
     scheduler, seed, res = seed_opti(payload)
-    @test fitness(scheduler, res) == fitness(scheduler, seed) == 0
+    @test Autrans.fitness(scheduler, res) == Autrans.fitness(scheduler, seed) == 0
 end
 
 @testset "inexact_payload" begin
 
     payload = make_simple_payload(5, 5, 5, 2)
     scheduler, seed, res = seed_opti(payload)
-    @test fitness(scheduler, res) <= fitness(scheduler, seed) 
-    @test fitness(scheduler, res) == 0
+    @test Autrans.fitness(scheduler, res) <= Autrans.fitness(scheduler, seed) 
+    @test Autrans.fitness(scheduler, res) == 0
     
     payload = make_simple_payload(3, 3, 3, 2)
     scheduler, seed, res = seed_opti(payload)
-    @test fitness(scheduler, res) <= fitness(scheduler, seed) 
-    @test fitness(scheduler, res) == 0
+    @test Autrans.fitness(scheduler, res) <= Autrans.fitness(scheduler, seed) 
+    @test Autrans.fitness(scheduler, res) == 0
     #display(scheduler, seed)
 
 end
@@ -100,27 +98,28 @@ end
 @testset "complex_payload" begin
     payload = make_complex_payload(5, 5, 2, false)
     scheduler, seed, res = seed_opti(payload)
-    @test fitness(scheduler, res) <= fitness(scheduler, seed) 
-    @test fitness(scheduler, res) == 10
+    @test Autrans.fitness(scheduler, res) <= Autrans.fitness(scheduler, seed) 
+    @test Autrans.fitness(scheduler, res) == 10
 
     # issue
     payload = make_complex_payload(10, 10, 2, false)
     scheduler, seed, res = seed_opti(payload)
-    @test fitness(scheduler, res) <= fitness(scheduler, seed) 
+    @test Autrans.fitness(scheduler, res) <= Autrans.fitness(scheduler, seed) 
     
     payload = make_simple_payload(12, 3, 3, 2)
     payload["workers"][2] = ("Worker 2",  [2, 3])
     scheduler, seed, res = seed_opti(payload)
-    @test @chain sum(seed, dims=1) extrema _[2] - _[1] == 0
-    @test fitness(scheduler, res) <= fitness(scheduler, seed) 
-    @test fitness(scheduler, res) == 13
+    # @test @chain sum(seed, dims=1) extrema _[2] - _[1] == 0
+    @test maximum(sum(seed, dims=1)) - minimum(sum(seed, dims=1)) == 0
+    @test Autrans.fitness(scheduler, res) <= Autrans.fitness(scheduler, seed) 
+    @test Autrans.fitness(scheduler, res) == 13
 
     payload = make_simple_payload(6, 3, 3, 2)
     payload["workers"][2] = ("Worker 2",  [2, 3])
     scheduler, seed, res = seed_opti(payload)
     @test @chain sum(seed, dims=1) extrema _[2] - _[1] == 0
-    @test fitness(scheduler, res) <= fitness(scheduler, seed) 
-    @test fitness(scheduler, res) == 13
+    @test Autrans.fitness(scheduler, res) <= Autrans.fitness(scheduler, seed) 
+    @test Autrans.fitness(scheduler, res) == 13
 end
 
 
@@ -130,13 +129,13 @@ end
     payload["workers"][2] = ("Worker 2",  [2, 3])
     scheduler, seed, res = seed_opti(payload)
     @test @chain sum(seed, dims=1) extrema _[2] - _[1] == 0
-    @test fitness(scheduler, res) <= fitness(scheduler, seed) 
-    @test fitness(scheduler, res) == 13
+    @test Autrans.fitness(scheduler, res) <= Autrans.fitness(scheduler, seed) 
+    @test Autrans.fitness(scheduler, res) == 13
     
     payload["balance_daysoff"] = true
     scheduler, seed, res = seed_opti(payload)
-    @test fitness(scheduler, res) <= fitness(scheduler, seed) 
-    @test fitness(scheduler, seed) == 87
+    @test Autrans.fitness(scheduler, res) <= Autrans.fitness(scheduler, seed) 
+    @test Autrans.fitness(scheduler, seed) == 87
 
 end
 
@@ -144,25 +143,22 @@ end
     payload = make_complex_payload(10, 10, 2, true)
     println("Benchmark")
     println("Scheduler Creation")
-    @btime scheduler = Scheduler(payload) # 18 micros
-    scheduler = Scheduler(payload)
+    scheduler = Autrans.Scheduler(payload)
     println("Scheduler SAT")
-    @btime @test check_satisfability($scheduler) == (true, "OK") # 3 micros
+    @test Autrans.check_satisfability(scheduler) == (true, "OK")
     println("Scheduler permutations_seed")
-    @btime seed = permutations_seed($scheduler) # 120 micro
-    seed = permutations_seed(scheduler) 
+    seed = Autrans.permutations_seed(scheduler)
     println("Scheduler Solving")
-    @btime res = solve($scheduler)   # 28.9ms, 1.41ms, 328.853ms
-    res = solve(scheduler)
-    @test fitness(scheduler, res) <= 15
-    #@test fitness(scheduler, seed) == 0
+    res = Autrans.solve(scheduler)
+    @test Autrans.fitness(scheduler, res) <= 15
+    #@test Autrans.fitness(scheduler, seed) == 0
 end
 
 @testset "primediv" begin
     payload = make_simple_payload(5, 7, 11, 3)
     scheduler, seed, res = seed_opti(payload)
-    @test fitness(scheduler, res) <= 20
-    @test fitness(scheduler, seed) == 70
+    @test Autrans.fitness(scheduler, res) <= 20
+    @test Autrans.fitness(scheduler, seed) == 70
 
     #payload = make_complex_payload(5, 7, 11, 3)
     #scheduler, seed, res = seed_opti(payload)
@@ -174,15 +170,18 @@ end
     payload = make_simple_payload(10, 10, 10, 2)
     scheduler, seed, res = seed_opti(payload)
 
-    @test fitness(scheduler, res) == 0
-    @test fitness(scheduler, seed) == 64
+    @test Autrans.fitness(scheduler, res) == 0
+    @test Autrans.fitness(scheduler, seed) == 64
 
     payload = make_simple_payload(3, 2, 3, 1)
     scheduler, seed, res = seed_opti(payload)
-    @test fitness(scheduler, res) == fitness(scheduler, seed) == 3
+    @test Autrans.fitness(scheduler, res) == Autrans.fitness(scheduler, seed) == 3
 
     payload = make_simple_payload(4, 2, 4, 1)
     scheduler, seed, res = seed_opti(payload)
-    @test fitness(scheduler, res) == fitness(scheduler, seed) == 4
+    @test Autrans.fitness(scheduler, res) == Autrans.fitness(scheduler, seed) == 4
     
 end
+
+# Run new tests
+include("test_autrans.jl")
