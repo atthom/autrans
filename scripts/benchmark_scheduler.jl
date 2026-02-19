@@ -84,6 +84,19 @@ function run_benchmark(name::String, num_workers::Int, num_days::Int, num_tasks:
     println("  - Available worker-days: $available_worker_days")
     println("  - Utilization: $(round(total_slots/available_worker_days*100, digits=1))%")
     
+    # Define standard constraints for benchmarking
+    hard_constraints = [
+        Autrans.HardConstraint(Autrans.TaskCoverageConstraint(), "Task Coverage"),
+        Autrans.HardConstraint(Autrans.NoConsecutiveTasksConstraint(), "No Consecutive Tasks"),
+        Autrans.HardConstraint(Autrans.DaysOffConstraint(), "Days Off")
+    ]
+    
+    soft_constraints = [
+        Autrans.SoftConstraint(Autrans.OverallEquityConstraint(), "Overall Equity"),
+        Autrans.SoftConstraint(Autrans.DailyEquityConstraint(), "Daily Equity"),
+        Autrans.SoftConstraint(Autrans.TaskDiversityConstraint(), "Task Diversity")
+    ]
+    
     # Create scheduler
     scheduler = AutransScheduler(
         workers,
@@ -91,26 +104,28 @@ function run_benchmark(name::String, num_workers::Int, num_days::Int, num_tasks:
         num_days,
         equity_strategy=equity_strategy,
         max_solve_time=max_solve_time,
-        verbose=false
+        verbose=false,
+        hard_constraints=hard_constraints,
+        soft_constraints=soft_constraints
     )
     
     # Solve and measure time using @btime for accuracy
     print("Solving... ")
     
-    # Use @btime for accurate benchmarking
+    # Use @timed for accurate benchmarking
     bench_result = @timed solve(scheduler)
-    result = bench_result.value
+    solution, failure_info = bench_result.value
     elapsed = bench_result.time
     
-    if result !== nothing
+    if solution !== nothing
         println("✅ SOLVED in $(round(elapsed, digits=2))s")
         
         # Calculate statistics
-        N, D, T = size(result)
-        total_assignments = sum(result)
+        N, D, T = size(solution)
+        total_assignments = sum(solution)
         
         # Worker workload distribution
-        worker_loads = [sum(result[w, :, :]) for w in 1:N]
+        worker_loads = [sum(solution[w, :, :]) for w in 1:N]
         
         println("\nResults:")
         println("  - Total assignments: $total_assignments")
@@ -241,17 +256,32 @@ function run_benchmark_suite()
     println("  - Available worker-days: $available_days7")
     println("  - Utilization: $(round(total_slots7/available_days7*100, digits=1))%")
     
+    # Define constraints for impossible scenario
+    hard_constraints7 = [
+        Autrans.HardConstraint(Autrans.TaskCoverageConstraint(), "Task Coverage"),
+        Autrans.HardConstraint(Autrans.NoConsecutiveTasksConstraint(), "No Consecutive Tasks"),
+        Autrans.HardConstraint(Autrans.DaysOffConstraint(), "Days Off")
+    ]
+    
+    soft_constraints7 = [
+        Autrans.SoftConstraint(Autrans.OverallEquityConstraint(), "Overall Equity"),
+        Autrans.SoftConstraint(Autrans.DailyEquityConstraint(), "Daily Equity"),
+        Autrans.SoftConstraint(Autrans.TaskDiversityConstraint(), "Task Diversity")
+    ]
+    
     scheduler7 = AutransScheduler(workers7, tasks7, 30, 
                                   equity_strategy=:proportional,
-                                  max_solve_time=60.0, verbose=false)
+                                  max_solve_time=60.0, verbose=false,
+                                  hard_constraints=hard_constraints7,
+                                  soft_constraints=soft_constraints7)
     print("Solving... ")
     start7 = time()
-    result7 = solve(scheduler7)
+    solution7, failure_info7 = solve(scheduler7)
     elapsed7 = time() - start7
     
-    if result7 !== nothing
+    if solution7 !== nothing
         println("✅ SOLVED in $(round(elapsed7, digits=2))s (Unexpected!)")
-        push!(results, (success=true, time=elapsed7, assignments=sum(result7), worker_loads=Int[]))
+        push!(results, (success=true, time=elapsed7, assignments=sum(solution7), worker_loads=Int[]))
     else
         println("❌ NO SOLUTION FOUND ($(round(elapsed7, digits=2))s) [Expected]")
         push!(results, (success=false, time=elapsed7, assignments=0, worker_loads=Int[]))
@@ -274,17 +304,32 @@ function run_benchmark_suite()
     println("  - Available worker-days: $available_days8")
     println("  - Utilization: $(round(total_slots8/available_days8*100, digits=1))%")
     
+    # Define constraints for impossible scenario
+    hard_constraints8 = [
+        Autrans.HardConstraint(Autrans.TaskCoverageConstraint(), "Task Coverage"),
+        Autrans.HardConstraint(Autrans.NoConsecutiveTasksConstraint(), "No Consecutive Tasks"),
+        Autrans.HardConstraint(Autrans.DaysOffConstraint(), "Days Off")
+    ]
+    
+    soft_constraints8 = [
+        Autrans.SoftConstraint(Autrans.OverallEquityConstraint(), "Overall Equity"),
+        Autrans.SoftConstraint(Autrans.DailyEquityConstraint(), "Daily Equity"),
+        Autrans.SoftConstraint(Autrans.TaskDiversityConstraint(), "Task Diversity")
+    ]
+    
     scheduler8 = AutransScheduler(workers8, tasks8, 30,
                                   equity_strategy=:proportional,
-                                  max_solve_time=60.0, verbose=false)
+                                  max_solve_time=60.0, verbose=false,
+                                  hard_constraints=hard_constraints8,
+                                  soft_constraints=soft_constraints8)
     print("Solving... ")
     start8 = time()
-    result8 = solve(scheduler8)
+    solution8, failure_info8 = solve(scheduler8)
     elapsed8 = time() - start8
     
-    if result8 !== nothing
+    if solution8 !== nothing
         println("✅ SOLVED in $(round(elapsed8, digits=2))s (Unexpected!)")
-        push!(results, (success=true, time=elapsed8, assignments=sum(result8), worker_loads=Int[]))
+        push!(results, (success=true, time=elapsed8, assignments=sum(solution8), worker_loads=Int[]))
     else
         println("❌ NO SOLUTION FOUND ($(round(elapsed8, digits=2))s) [Expected]")
         push!(results, (success=false, time=elapsed8, assignments=0, worker_loads=Int[]))
@@ -345,9 +390,25 @@ println()
 println("Running warmup to compile functions...")
 warmup_workers = [AutransWorker("W$i") for i in 1:5]
 warmup_tasks = [AutransTask("T$i", 2, 1:3) for i in 1:2]
+
+# Define constraints for warmup
+warmup_hard = [
+    Autrans.HardConstraint(Autrans.TaskCoverageConstraint(), "Task Coverage"),
+    Autrans.HardConstraint(Autrans.NoConsecutiveTasksConstraint(), "No Consecutive Tasks"),
+    Autrans.HardConstraint(Autrans.DaysOffConstraint(), "Days Off")
+]
+
+warmup_soft = [
+    Autrans.SoftConstraint(Autrans.OverallEquityConstraint(), "Overall Equity"),
+    Autrans.SoftConstraint(Autrans.DailyEquityConstraint(), "Daily Equity"),
+    Autrans.SoftConstraint(Autrans.TaskDiversityConstraint(), "Task Diversity")
+]
+
 warmup_scheduler = AutransScheduler(warmup_workers, warmup_tasks, 3, 
                                    equity_strategy=:proportional, 
-                                   max_solve_time=10.0, verbose=false)
+                                   max_solve_time=10.0, verbose=false,
+                                   hard_constraints=warmup_hard,
+                                   soft_constraints=warmup_soft)
 solve(warmup_scheduler)
 println("Warmup complete!\n")
 
