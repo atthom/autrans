@@ -3,6 +3,7 @@ module Autrans
 using JuMP, HiGHS, DataFrames, Printf
 
 include("structs.jl")
+include("constraints.jl")
 include("optimization.jl")
 include("display.jl")
 

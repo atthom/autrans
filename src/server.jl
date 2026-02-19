@@ -37,6 +37,43 @@ function parse_tasks(tasks_data)
 end
 
 """
+Build constraint objects from constraint name strings
+"""
+function build_constraints(hard_names, soft_names)
+    # Convert to regular vectors if needed (handles JSON3 arrays)
+    hard_names_vec = collect(hard_names)
+    soft_names_vec = collect(soft_names)
+    
+    # Map constraint names to constraint objects
+    constraint_map = Dict(
+        "TaskCoverage" => Autrans.TaskCoverageConstraint(),
+        "NoConsecutiveTasks" => Autrans.NoConsecutiveTasksConstraint(),
+        "DaysOff" => Autrans.DaysOffConstraint(),
+        "OverallEquity" => Autrans.OverallEquityConstraint(),
+        "DailyEquity" => Autrans.DailyEquityConstraint(),
+        "TaskDiversity" => Autrans.TaskDiversityConstraint()
+    )
+    
+    # Build hard constraints with proper typing
+    hard_constraints = Autrans.Constraint{Val{:HARD}}[]
+    for name in hard_names_vec
+        if haskey(constraint_map, name)
+            push!(hard_constraints, Autrans.HardConstraint(constraint_map[name], name))
+        end
+    end
+    
+    # Build soft constraints with proper typing
+    soft_constraints = Autrans.Constraint{Val{:SOFT}}[]
+    for name in soft_names_vec
+        if haskey(constraint_map, name)
+            push!(soft_constraints, Autrans.SoftConstraint(constraint_map[name], name))
+        end
+    end
+    
+    return hard_constraints, soft_constraints
+end
+
+"""
 Convert schedule array to display format (Tasks × Days)
 """
 function schedule_to_display(schedule, scheduler::AutransScheduler)
@@ -72,7 +109,6 @@ Convert schedule to time aggregation (Days × Workers)
 """
 function schedule_to_time_agg(schedule, scheduler::AutransScheduler)
     N, D, T = size(schedule)
-    
     columns = []
     colindex = Dict("names" => ["Days"])
     
@@ -161,6 +197,13 @@ end
         nb_days = body.nb_days
         balance_daysoff = get(body, :balance_daysoff, false)
         
+        # Get constraint lists from request (with defaults)
+        hard_names = get(body, :hard_constraints, ["TaskCoverage", "NoConsecutiveTasks", "DaysOff"])
+        soft_names = get(body, :soft_constraints, ["OverallEquity", "DailyEquity", "TaskDiversity"])
+        
+        # Build constraint objects
+        hard_constraints, soft_constraints = build_constraints(hard_names, soft_names)
+        
         # Determine equity strategy
         equity_strategy = balance_daysoff ? :proportional : :absolute
         
@@ -171,7 +214,9 @@ end
             nb_days,
             equity_strategy=equity_strategy,
             max_solve_time=60.0,
-            verbose=false
+            verbose=false,
+            hard_constraints=hard_constraints,
+            soft_constraints=soft_constraints
         )
         
         # Try to solve
@@ -242,6 +287,13 @@ end
         nb_days = body.nb_days
         balance_daysoff = get(body, :balance_daysoff, false)
         
+        # Get constraint lists from request (with defaults)
+        hard_names = get(body, :hard_constraints, ["TaskCoverage", "NoConsecutiveTasks", "DaysOff"])
+        soft_names = get(body, :soft_constraints, ["OverallEquity", "DailyEquity", "TaskDiversity"])
+        
+        # Build constraint objects
+        hard_constraints, soft_constraints = build_constraints(hard_names, soft_names)
+        
         # Determine equity strategy
         equity_strategy = balance_daysoff ? :proportional : :absolute
         
@@ -252,7 +304,9 @@ end
             nb_days,
             equity_strategy=equity_strategy,
             max_solve_time=300.0,
-            verbose=false
+            verbose=false,
+            hard_constraints=hard_constraints,
+            soft_constraints=soft_constraints
         )
         
         # Solve
@@ -412,6 +466,13 @@ end
         start_date = get(body, :start_date, string(today()))
         trip_name = get(body, :trip_name, "Schedule")
         
+        # Get constraint lists from request (with defaults)
+        hard_names = get(body, :hard_constraints, ["TaskCoverage", "NoConsecutiveTasks", "DaysOff"])
+        soft_names = get(body, :soft_constraints, ["OverallEquity", "DailyEquity", "TaskDiversity"])
+        
+        # Build constraint objects
+        hard_constraints, soft_constraints = build_constraints(hard_names, soft_names)
+        
         # Determine equity strategy
         equity_strategy = balance_daysoff ? :proportional : :absolute
         
@@ -422,7 +483,9 @@ end
             nb_days,
             equity_strategy=equity_strategy,
             max_solve_time=300.0,
-            verbose=false
+            verbose=false,
+            hard_constraints=hard_constraints,
+            soft_constraints=soft_constraints
         )
         
         # Solve
@@ -471,6 +534,13 @@ end
         start_date = get(body, :start_date, string(today()))
         trip_name = get(body, :trip_name, "Schedule")
         
+        # Get constraint lists from request (with defaults)
+        hard_names = get(body, :hard_constraints, ["TaskCoverage", "NoConsecutiveTasks", "DaysOff"])
+        soft_names = get(body, :soft_constraints, ["OverallEquity", "DailyEquity", "TaskDiversity"])
+        
+        # Build constraint objects
+        hard_constraints, soft_constraints = build_constraints(hard_names, soft_names)
+        
         # Determine equity strategy
         equity_strategy = balance_daysoff ? :proportional : :absolute
         
@@ -481,7 +551,9 @@ end
             nb_days,
             equity_strategy=equity_strategy,
             max_solve_time=300.0,
-            verbose=false
+            verbose=false,
+            hard_constraints=hard_constraints,
+            soft_constraints=soft_constraints
         )
         
         # Solve
