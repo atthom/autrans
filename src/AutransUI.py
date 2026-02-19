@@ -26,9 +26,49 @@ def h3_button(txt):
         st.rerun()
 
 
-@st.dialog("Schedule is not possible")
-def sat_schedule(txt):
-    h3_button(txt)
+@st.dialog("Schedule is not possible", width="large")
+def sat_schedule(txt, details=None):
+    st.markdown(f"<h3 style='text-align: center; color: #dc3545;'>Schedule is not feasible</h3>", unsafe_allow_html=True)
+    
+    # Show the main message
+    st.markdown("### 📊 Problem Summary")
+    st.text(txt)
+    
+    # Show detailed diagnostics if available
+    if details and isinstance(details, dict):
+        st.markdown("---")
+        st.markdown("### 🔍 Detailed Diagnostics")
+        
+        # Capacity analysis
+        if "capacity" in details:
+            capacity = details["capacity"]
+            st.markdown("#### Capacity Analysis")
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total Slots Needed", capacity.get("total_slots", "N/A"))
+            col2.metric("Available Worker-Days", capacity.get("available_worker_days", "N/A"))
+            col3.metric("Utilization", f"{capacity.get('utilization_percent', 'N/A')}%")
+            
+            # Daily issues
+            if capacity.get("daily_issues"):
+                st.markdown("#### ⚠️ Daily Capacity Issues")
+                for issue in capacity["daily_issues"][:5]:  # Show first 5
+                    st.warning(issue)
+        
+        # Constraint details
+        if "constraints" in details and details["constraints"]:
+            st.markdown("#### 🔧 Constraint Requirements")
+            st.markdown("*These are the requirements that couldn't be satisfied:*")
+            for constraint in details["constraints"][:8]:  # Show first 8
+                st.text(f"• {constraint}")
+        
+        # Failed level
+        if "failed_level" in details:
+            st.info(f"Failed at relaxation level {details['failed_level']}")
+    
+    # OK button
+    col1, col2, col3 = st.columns([1,1,1])
+    if col2.button("OK", use_container_width=True, type="primary"):
+        st.rerun()
 
 @st.dialog("Setting Error")
 def setting_error(txt):
@@ -59,7 +99,7 @@ def make_schedule(placeholder, df, colors):
         # colors is list of colors for each chore
         st.markdown("""
         <div style="background-color: rgb(16, 185, 129); padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
-            <h2 style="color: white; margin: 0;">Chore Schedule</h2>
+            <h2 style="color: white; margin: 0;">Schedule</h2>
         </div>
         """, unsafe_allow_html=True)
 
@@ -162,76 +202,69 @@ def add_worker():
     if len(st.session_state['workers']) > 20:
         setting_error("Limit of 20 people reached.")
     
-    w_names, _ = zip(*st.session_state["workers"])
-    w_names = [s.split(" ")[-1] for s in w_names]
-    numbers = []
-    for s in w_names:
-        try:
-            numbers.append(int(s))
-        except:
-            pass
-    
-    st.session_state['workers'].append((f"People {max(numbers)+1}", []))
+    # Simply use the next index as the worker number
+    next_number = len(st.session_state['workers']) + 1
+    st.session_state['workers'].append((f"Person {next_number}", []))
 
 def display_general_settings():
-    with st.container(border=True):
-        header = st.columns([6])
-        header[0].markdown("### ⚙️ Settings")
-        
-        settings_row = st.columns([3, 3, 3], vertical_alignment="center")
-        
-        trip_placeholder = st.session_state.get("trip_name", "My Trip")
-        st.session_state["trip_name"] = settings_row[0].text_input("Trip Name", value=trip_placeholder, placeholder="Trip Name")
-        
-        start_date = st.session_state.get("start_date", datetime.date.today())
-        st.session_state["start_date"] = settings_row[1].date_input("Start Date", value=start_date)
-        
-        nb_days = st.session_state.get("nb_days", 7)
-        st.session_state["nb_days"] = settings_row[2].number_input("Duration (days)", value=nb_days, max_value=20)
-        
-        # Generate selected_days
-        dates = [st.session_state["start_date"] + datetime.timedelta(days=i) for i in range(st.session_state["nb_days"])]
-        week_numbers = [(d - st.session_state["start_date"]).days // 7 for d in dates]
-        selected_days = [f"{d.strftime('%A')} (W {1 + w})" if w > 0 else d.strftime("%A") for d, w in zip(dates, week_numbers)]
-    return st.session_state["nb_days"], selected_days 
+    settings_row = st.columns([3, 3, 3], vertical_alignment="center")
+    
+    trip_placeholder = st.session_state.get("trip_name", "My Trip")
+    st.session_state["trip_name"] = settings_row[0].text_input("Trip Name", value=trip_placeholder, placeholder="Trip Name")
+    
+    start_date = st.session_state.get("start_date", datetime.date.today())
+    st.session_state["start_date"] = settings_row[1].date_input("Start Date", value=start_date)
+    
+    nb_days = st.session_state.get("nb_days", 7)
+    st.session_state["nb_days"] = settings_row[2].number_input("Duration (days)", value=nb_days, max_value=20)
+    
+    # Generate selected_days
+    dates = [st.session_state["start_date"] + datetime.timedelta(days=i) for i in range(st.session_state["nb_days"])]
+    week_numbers = [(d - st.session_state["start_date"]).days // 7 for d in dates]
+    selected_days = [f"{d.strftime('%A')} (W {1 + w})" if w > 0 else d.strftime("%A") for d, w in zip(dates, week_numbers)]
+    return st.session_state["nb_days"], selected_days
 
 def display_chores_section():
-    with st.container(border=True):
-        chore_row = st.columns([6]) 
-        chore_row[0].markdown("#### 🧹 Chores")
+    show_ranges = st.toggle("Show ranges", value=False, help="Show day range selectors for each chore")
 
-        show_ranges = st.toggle("Show ranges", value=False, help="Show day range selectors for each chore")
+    if 'chores' not in st.session_state:
+        st.session_state['chores'] = []
+        default_chore_names = ["Cooking", "Cleaning", "Shopping"]
 
-        if 'chores' not in st.session_state:
-            st.session_state['chores'] = []
-            default_chore_nb = 3
+        for i, chore_name in enumerate(default_chore_names):
+            color = generate_pastel_color()
+            chore_name_i, nb_worker_i, color_i, chore_start_i, chore_end_i = display_chore(chore_name, 2, color, i, with_range=show_ranges)
+            st.session_state['chores'].append((chore_name_i, nb_worker_i, 1, chore_start_i, chore_end_i, color_i))
+    else:   
+        for (i, (chore_name_i, nb_worker_i, _, _, _, color)) in enumerate(st.session_state['chores']):
+            chore_name_i, nb_worker_i, color_i, chore_start_i, chore_end_i = display_chore(chore_name_i, nb_worker_i, color, i, with_range=show_ranges)
+            st.session_state['chores'][i] = (chore_name_i, nb_worker_i, 1, chore_start_i, chore_end_i, color_i)
 
-            for i in range(default_chore_nb):
-                color = generate_pastel_color()
-                chore_name_i, nb_worker_i, color_i, chore_start_i, chore_end_i = display_chore(f"Chore {i+1}", 2, color, i, with_range=show_ranges)
-                st.session_state['chores'].append((chore_name_i, nb_worker_i, 1, chore_start_i, chore_end_i, color_i))
-        else:   
-            for (i, (chore_name_i, nb_worker_i, _, _, _, color)) in enumerate(st.session_state['chores']):
-                chore_name_i, nb_worker_i, color_i, chore_start_i, chore_end_i = display_chore(chore_name_i, nb_worker_i, color, i, with_range=show_ranges)
-                st.session_state['chores'][i] = (chore_name_i, nb_worker_i, 1, chore_start_i, chore_end_i, color_i)
+    row_add = st.columns([2, 2, 2])
+    st.markdown('<div class="action-button">', unsafe_allow_html=True)
+    btn_chore = row_add[1].button("Add Task", icon=":material/add:", type="primary", key="btn_add_chore", on_click=add_chore)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-        row_add = st.columns([2, 2, 2])
-        st.markdown('<div class="action-button">', unsafe_allow_html=True)
-        btn_chore = row_add[1].button("Add Chore", icon=":material/add:", type="primary", key="btn_add_chore", on_click=add_chore)
-        st.markdown('</div>', unsafe_allow_html=True)
+    task_per_day, _, _, _, _, _ = zip(*st.session_state['chores'])
 
-        task_per_day, _, _, _, _, _ = zip(*st.session_state['chores'])
+    st.session_state[f"chore_names"] = [st.session_state[f"chore_name_{i}"] for i in range(len(st.session_state['chores']))]
 
-        st.session_state[f"chore_names"] = [st.session_state[f"chore_name_{i}"] for i in range(len(st.session_state['chores']))]
-
-        return task_per_day
+    return task_per_day
 
 
 def on_save_state():
     only_keys = [k for k in list(st.session_state.keys()) if k not in ["load_state", "save_state", "submit"]]
     only_keys = [k for k in only_keys if ("del" not in k) and ("btn" not in k)]
 
-    serialized_state = {k: st.session_state[k] for k in only_keys}
+    serialized_state = {}
+    for k in only_keys:
+        value = st.session_state[k]
+        # Convert datetime.date to string for JSON serialization
+        if isinstance(value, datetime.date):
+            serialized_state[k] = value.isoformat()
+        else:
+            serialized_state[k] = value
+    
     serialized_state = json.dumps(serialized_state).encode()
     d = zlib.compress(serialized_state, level=9)
     c = base64.b64encode(d).decode('utf-8')
@@ -245,6 +278,11 @@ def on_load_state(state):
     state = zlib.decompress(state)
     state = json.loads(state)
 
+    # Clear widget-related keys to avoid conflicts
+    widget_keys = [k for k in st.session_state.keys() if k.startswith(("chore_name_", "chore_workers_", "chore_color_", "chore_range_", "worker_name_", "worker_days_off_"))]
+    for k in widget_keys:
+        del st.session_state[k]
+
     for k, v in state.items():
         if "del" in k:
             continue
@@ -252,43 +290,44 @@ def on_load_state(state):
             continue
         if k in ["load_state", "save_state", "submit"]:
             continue
-        st.session_state[k] = v
+        
+        # Convert date strings back to datetime.date objects
+        if k == "start_date" and isinstance(v, str):
+            st.session_state[k] = datetime.date.fromisoformat(v)
+        else:
+            st.session_state[k] = v
 
 def display_worker_section():
-    with st.container(border=True):
-        worker_row = st.columns([6])
-        worker_row[0].markdown("#### 👥 Workers")
-        
-        if 'with_days_off' not in st.session_state:
-            st.session_state['with_days_off'] = True
+    if 'with_days_off' not in st.session_state:
+        st.session_state['with_days_off'] = True
 
-        if "workers" not in st.session_state:
-            st.session_state["workers"] = []
-            default_nb_worker = 4
+    if "workers" not in st.session_state:
+        st.session_state["workers"] = []
+        default_worker_names = ["Alex", "Benjamin", "Caroline", "Diane", "Esteban", "Frank"]
 
-            for i in range(default_nb_worker):
-                worker_name_i, worker_days_off_i = display_worker(f"Person {i+1}", [], i)
-                st.session_state["workers"].append((worker_name_i, worker_days_off_i))
-        else:
-            for (i, (worker_name_i, worker_days_off_i)) in enumerate(st.session_state["workers"]):
-                worker_name_i, worker_days_off_i = display_worker(worker_name_i, worker_days_off_i, i)
+        for i, name in enumerate(default_worker_names):
+            worker_name_i, worker_days_off_i = display_worker(name, [], i)
+            st.session_state["workers"].append((worker_name_i, worker_days_off_i))
+    else:
+        for (i, (worker_name_i, worker_days_off_i)) in enumerate(st.session_state["workers"]):
+            worker_name_i, worker_days_off_i = display_worker(worker_name_i, worker_days_off_i, i)
 
-        row_add = st.columns([2, 2, 2])
-        st.markdown('<div class="action-button">', unsafe_allow_html=True)
-        btn_task = row_add[1].button("Add Worker", icon=":material/add:", type="primary", on_click=add_worker)
-        st.markdown('</div>', unsafe_allow_html=True)
+    row_add = st.columns([2, 3, 1])
+    st.markdown('<div class="action-button">', unsafe_allow_html=True)
+    btn_task = row_add[1].button("Add Worker", icon=":material/add:", type="primary", on_click=add_worker)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-        balance_row = st.columns([2, 4])
-        balance_row[0].markdown("**Balance:**")
-        default = st.session_state.get("balance_daysoff_btn", "Days off")
+    balance_row = st.columns([2, 4])
+    balance_row[0].markdown("**Balance:**")
+    default = st.session_state.get("balance_daysoff_btn", "Days off")
 
-        st.session_state['balance_daysoff_btn'] = balance_row[1].pills("balance_daysoff", ["Days off", "Ignore days off"], default=default, label_visibility="collapsed",
-                                            help="""With days off balance, workers will work in proportion of theirs working days.
-                                            With Ignore days off, workers will work in proportion of total days (including their days off).""")
-        if st.session_state['balance_daysoff_btn'] == "Days off":
-            balance_daysoff = True
-        else:
-            balance_daysoff = False
+    st.session_state['balance_daysoff_btn'] = balance_row[1].pills("balance_daysoff", ["Days off", "Ignore days off"], default=default, label_visibility="collapsed",
+                                        help="""With days off balance, workers will work in proportion of theirs working days.
+                                        With Ignore days off, workers will work in proportion of total days (including their days off).""")
+    if st.session_state['balance_daysoff_btn'] == "Days off":
+        balance_daysoff = True
+    else:
+        balance_daysoff = False
     return balance_daysoff
 
 if True:
@@ -332,13 +371,18 @@ Autrans automatically generates an optimized plan where: <br>
 settings, tables = st.columns([4, 8])
 
 weekdays = ["Monday", "Tuesday" , "Wednesday", "Thursday" , "Friday", "Saturday", "Sunday"]
-with settings.container(border=True):
-
-    nb_days, selected_days = display_general_settings()
-
-    chore_per_day = display_chores_section()
-
-    balance_daysoff = display_worker_section()
+with settings:
+    with st.container(border=True):
+        st.markdown("### ⚙️ General Settings")
+        nb_days, selected_days = display_general_settings()
+    
+    with st.container(border=True):
+        st.markdown("### 📋 Tasks")
+        chore_per_day = display_chores_section()
+    
+    with st.container(border=True):
+        st.markdown("### 👥 Workers")
+        balance_daysoff = display_worker_section()
     
     workers, _ = zip(*st.session_state["workers"])
     workers = list(workers)
@@ -423,31 +467,168 @@ if submit:
         st.session_state['grid_data'] = all_agg["display"]
         st.session_state['time_data'] = all_agg["time"]
         st.session_state['jobs_data'] = all_agg["jobs"]
+        
+        # Store export payload for later use
+        st.session_state['export_workers'] = workers
+        st.session_state['export_tasks'] = all_tasks
+        st.session_state['export_balance'] = balance_daysoff
     else:
-        sat_schedule(sat_agg["msg"])
+        # Pass detailed diagnostics if available
+        details = sat_agg.get("details", None)
+        sat_schedule(sat_agg["msg"], details)
  
 
 with tables:
     with st.container(border=True):
-        tabs = st.tabs(["Schedule", "Grid", "Audit"])
-        with tabs[0]:
-            schedule_placeholder = st.empty()
-            if 'schedule_df' in st.session_state:
-                make_schedule(schedule_placeholder, st.session_state['schedule_df'], st.session_state['schedule_colors'])
-            else:
-                schedule_placeholder.markdown("Your schedule is here")
-        with tabs[1]:
-            schedule_grid = make_table("Schedule", ["Tasks"] + selected_days)
-            if 'grid_data' in st.session_state:
-                set_df(schedule_grid, st.session_state['grid_data'])
-        with tabs[2]:
-            schedule_grid_audit = make_table("Schedule", ["Tasks"] + selected_days)
-            if 'grid_data' in st.session_state:
-                set_df(schedule_grid_audit, st.session_state['grid_data'])
-            task_agg = make_table("Affectation per day", ["Days"] + workers)
-            if 'time_data' in st.session_state:
-                set_df(task_agg, st.session_state['time_data'])
-            task_per_day_agg = make_table("Affectation per task", ["Tasks"] + workers)
-            if 'jobs_data' in st.session_state:
-                set_df(task_per_day_agg, st.session_state['jobs_data'])
+        tabs = st.tabs(["Schedule", "Grid", "Audit", "Export"])
+    with tabs[0]:
+        schedule_placeholder = st.empty()
+        if 'schedule_df' in st.session_state:
+            make_schedule(schedule_placeholder, st.session_state['schedule_df'], st.session_state['schedule_colors'])
+        else:
+            schedule_placeholder.markdown("Your schedule is here")
+    with tabs[1]:
+        schedule_grid = make_table("Schedule", ["Tasks"] + selected_days)
+        if 'grid_data' in st.session_state:
+            set_df(schedule_grid, st.session_state['grid_data'])
+    with tabs[2]:
+        schedule_grid_audit = make_table("Schedule", ["Tasks"] + selected_days)
+        if 'grid_data' in st.session_state:
+            set_df(schedule_grid_audit, st.session_state['grid_data'])
+        task_agg = make_table("Affectation per day", ["Days"] + workers)
+        if 'time_data' in st.session_state:
+            set_df(task_agg, st.session_state['time_data'])
+        task_per_day_agg = make_table("Affectation per task", ["Tasks"] + workers)
+        if 'jobs_data' in st.session_state:
+            set_df(task_per_day_agg, st.session_state['jobs_data'])
+        
+        # Add legend
+        st.markdown("---")
+        st.markdown("### 📖 Legend")
+        st.markdown("""
+        **Understanding the Audit Tables:**
+        
+        - **Schedule**: Shows which workers are assigned to each task on each day
+        - **Affectation per day**: Shows how many tasks each worker does per day (and total)
+        - **Affectation per task**: Shows how many times each worker does each task (and total)
+        
+        **Notation:**
+        - **\*** (asterisk) = Worker had a day off on that day/task period
+        - Numbers with * indicate work done despite having days off in that period
+        - TOTAL row/column shows the sum across all days/tasks
+        """)
+    with tabs[3]:
+        if 'grid_data' in st.session_state:
+            st.markdown("""
+            <div style="background-color: rgb(16, 185, 129); padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
+                <h2 style="color: white; margin: 0;">📥 Export Your Schedule</h2>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown("### Choose your export format:")
+            st.markdown("")
+            
+            col1, col2 = st.columns(2)
+            
+            # Prepare payload with start_date and trip_name
+            export_payload = {
+                "workers": st.session_state.get('export_workers', []),
+                "tasks": st.session_state.get('export_tasks', []),
+                "nb_days": st.session_state.get('nb_days', 7),
+                "balance_daysoff": st.session_state.get('export_balance', False),
+                "start_date": st.session_state["start_date"].isoformat(),
+                "trip_name": st.session_state.get('trip_name', 'My_Trip')
+            }
+            
+            with col1:
+                    if st.button("📅 Download iCalendar (.ics)", type="primary", use_container_width=True):
+                        try:
+                            res = requests.post("http://127.0.0.1:8080/export/ics", json=export_payload)
+                            if res.status_code == 200:
+                                st.download_button(
+                                    label="💾 Save autrans-schedule.ics",
+                                    data=res.content,
+                                    file_name="autrans-schedule.ics",
+                                    mime="text/calendar",
+                                    use_container_width=True
+                                )
+                                st.success("✅ iCalendar file ready for download!")
+                            else:
+                                st.error(f"❌ Export failed: {res.json().get('error', 'Unknown error')}")
+                        except Exception as e:
+                            st.error(f"❌ Error: {str(e)}")
+                    
+                    st.markdown("")
+                    st.markdown("**Compatible with:**")
+                    st.markdown("- Microsoft Outlook")
+                    st.markdown("- Google Calendar")
+                    st.markdown("- Apple Calendar")
+                    st.markdown("- Any calendar app")
+            
+            with col2:
+                    if st.button("📊 Download CSV", type="primary", use_container_width=True):
+                        try:
+                            res = requests.post("http://127.0.0.1:8080/export/csv", json=export_payload)
+                            if res.status_code == 200:
+                                st.download_button(
+                                    label="💾 Save autrans-schedule.csv",
+                                    data=res.content,
+                                    file_name="autrans-schedule.csv",
+                                    mime="text/csv",
+                                    use_container_width=True
+                                )
+                                st.success("✅ CSV file ready for download!")
+                            else:
+                                st.error(f"❌ Export failed: {res.json().get('error', 'Unknown error')}")
+                        except Exception as e:
+                            st.error(f"❌ Error: {str(e)}")
+                    
+                    st.markdown("")
+                    st.markdown("**Compatible with:**")
+                    st.markdown("- Microsoft Excel")
+                    st.markdown("- Google Sheets")
+                    st.markdown("- LibreOffice Calc")
+                    st.markdown("- Any spreadsheet app")
+            
+            st.markdown("---")
+            st.markdown("### 📖 Import Instructions")
+            
+            with st.expander("📅 How to import iCalendar (.ics) files"):
+                    st.markdown("""
+                    **Microsoft Outlook:**
+                    1. Open Outlook
+                    2. Go to File → Open & Export → Import/Export
+                    3. Select "Import an iCalendar (.ics) file"
+                    4. Browse to the downloaded file
+                    
+                    **Google Calendar:**
+                    1. Open Google Calendar
+                    2. Click the gear icon → Settings
+                    3. Select "Import & Export" from the left menu
+                    4. Click "Select file from your computer"
+                    5. Choose the downloaded .ics file
+                    
+                    **Apple Calendar:**
+                    1. Open Calendar app
+                    2. Go to File → Import
+                    3. Select the downloaded .ics file
+                    """)
+            
+            with st.expander("📊 How to open CSV files"):
+                    st.markdown("""
+                    **Microsoft Excel:**
+                    1. Open Excel
+                    2. Go to File → Open
+                    3. Select the downloaded .csv file
+                    
+                    **Google Sheets:**
+                    1. Open Google Sheets
+                    2. Go to File → Import
+                    3. Upload the .csv file
+                    
+                    **Double-click:**
+                    - Most systems will open CSV files in your default spreadsheet app
+                    """)
+        else:
+            st.info("📋 Generate a schedule first to enable export options")
         
