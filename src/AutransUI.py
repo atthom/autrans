@@ -630,6 +630,9 @@ if submit:
         
         # Set flag to show schedule tab
         st.session_state['show_schedule'] = True
+        
+        # Show success message
+        st.success("✅ Schedule generated successfully! Click the **Schedule** tab above to view it.", icon="🎉")
     else:
         # Pass detailed diagnostics if available
         details = sat_agg.get("details", None)
@@ -638,15 +641,171 @@ if submit:
 
 with tables:
     with st.container(border=True):
-        tabs = st.tabs(["Help", "Schedule", "Grid", "Audit", "Export"])
-    
-    # Determine which tab to show
-    if 'schedule_df' in st.session_state and st.session_state.get('show_schedule', False):
-        selected_tab = 1  # Schedule tab
-    else:
-        selected_tab = 0  # Help tab (default)
+        tabs = st.tabs(["Schedule", "Grid", "Audit", "Export", "Help"])
     
     with tabs[0]:
+        schedule_placeholder = st.empty()
+        if 'schedule_df' in st.session_state:
+            make_schedule(schedule_placeholder, st.session_state['schedule_df'], st.session_state['schedule_colors'])
+        else:
+            schedule_placeholder.markdown("Your schedule is here")
+    with tabs[1]:
+        schedule_grid = make_table("Schedule", ["Tasks"] + selected_days)
+        if 'grid_data' in st.session_state:
+            set_df(schedule_grid, st.session_state['grid_data'])
+    with tabs[2]:
+        schedule_grid_audit = make_table("Schedule", ["Tasks"] + selected_days)
+        if 'grid_data' in st.session_state:
+            set_df(schedule_grid_audit, st.session_state['grid_data'])
+        task_agg = make_table("Affectation per day", ["Days"] + workers)
+        if 'time_data' in st.session_state:
+            set_df(task_agg, st.session_state['time_data'])
+        task_per_day_agg = make_table("Affectation per task", ["Tasks"] + workers)
+        if 'jobs_data' in st.session_state:
+            set_df(task_per_day_agg, st.session_state['jobs_data'])
+        
+        # Add legend
+        st.markdown("---")
+        st.markdown("### 📖 Legend")
+        st.markdown("""
+        **Understanding the Audit Tables:**
+        
+        - **Schedule**: Shows which workers are assigned to each task on each day
+        - **Affectation per day**: Shows how many tasks each worker does per day (and total)
+        - **Affectation per task**: Shows how many times each worker does each task (and total)
+        
+        **Notation:**
+        - **\*** (asterisk) = Worker had a day off on that day/task period
+        - Numbers with * indicate work done despite having days off in that period
+        - TOTAL row/column shows the sum across all days/tasks
+        """)
+    with tabs[3]:
+        if 'grid_data' in st.session_state:
+            st.markdown("""
+            <div style="background-color: rgb(16, 185, 129); padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
+                <h2 style="color: white; margin: 0;">📥 Export Your Schedule</h2>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown("### Choose your export format:")
+            st.markdown("")
+            
+            col1, col2 = st.columns(2)
+            
+            # Prepare payload with start_date and trip_name
+            export_payload = {
+                "workers": st.session_state.get('export_workers', []),
+                "tasks": st.session_state.get('export_tasks', []),
+                "nb_days": st.session_state.get('nb_days', 7),
+                "balance_daysoff": st.session_state.get('export_balance', False),
+                "start_date": st.session_state["start_date"].isoformat(),
+                "trip_name": st.session_state.get('trip_name', 'My_Trip')
+            }
+            
+            with col1:
+                    if st.button("📅 Download iCalendar (.ics)", type="primary", use_container_width=True, key="export_ics_btn"):
+                        try:
+                            res = requests.post("http://127.0.0.1:8080/export/ics", json=export_payload)
+                            if res.status_code == 200:
+                                # Generate filename from trip details
+                                trip_name = st.session_state.get('trip_name', 'My_Trip').replace(' ', '_')
+                                start_date = st.session_state["start_date"].isoformat()
+                                nb_days = st.session_state.get('nb_days', 7)
+                                filename = f"Schedule-{trip_name}-{start_date}-{nb_days}days.ics"
+                                
+                                st.download_button(
+                                    label=f"💾 Save {filename}",
+                                    data=res.content,
+                                    file_name=filename,
+                                    mime="text/calendar",
+                                    use_container_width=True
+                                )
+                                st.success("✅ iCalendar file ready for download!")
+                            else:
+                                st.error(f"❌ Export failed: {res.json().get('error', 'Unknown error')}")
+                        except Exception as e:
+                            st.error(f"❌ Error: {str(e)}")
+                    
+                    st.markdown("")
+                    st.markdown("**Compatible with:**")
+                    st.markdown("- Microsoft Outlook")
+                    st.markdown("- Google Calendar")
+                    st.markdown("- Apple Calendar")
+                    st.markdown("- Any calendar app")
+            
+            with col2:
+                    if st.button("📊 Download CSV", type="primary", use_container_width=True, key="export_csv_btn"):
+                        try:
+                            res = requests.post("http://127.0.0.1:8080/export/csv", json=export_payload)
+                            if res.status_code == 200:
+                                # Generate filename from trip details
+                                trip_name = st.session_state.get('trip_name', 'My_Trip').replace(' ', '_')
+                                start_date = st.session_state["start_date"].isoformat()
+                                nb_days = st.session_state.get('nb_days', 7)
+                                filename = f"Schedule-{trip_name}-{start_date}-{nb_days}days.csv"
+                                
+                                st.download_button(
+                                    label=f"💾 Save {filename}",
+                                    data=res.content,
+                                    file_name=filename,
+                                    mime="text/csv",
+                                    use_container_width=True
+                                )
+                                st.success("✅ CSV file ready for download!")
+                            else:
+                                st.error(f"❌ Export failed: {res.json().get('error', 'Unknown error')}")
+                        except Exception as e:
+                            st.error(f"❌ Error: {str(e)}")
+                    
+                    st.markdown("")
+                    st.markdown("**Compatible with:**")
+                    st.markdown("- Microsoft Excel")
+                    st.markdown("- Google Sheets")
+                    st.markdown("- LibreOffice Calc")
+                    st.markdown("- Any spreadsheet app")
+            
+            st.markdown("---")
+            st.markdown("### 📖 Import Instructions")
+            
+            with st.expander("📅 How to import iCalendar (.ics) files"):
+                    st.markdown("""
+                    **Microsoft Outlook:**
+                    1. Open Outlook
+                    2. Go to File → Open & Export → Import/Export
+                    3. Select "Import an iCalendar (.ics) file"
+                    4. Browse to the downloaded file
+                    
+                    **Google Calendar:**
+                    1. Open Google Calendar
+                    2. Click the gear icon → Settings
+                    3. Select "Import & Export" from the left menu
+                    4. Click "Select file from your computer"
+                    5. Choose the downloaded .ics file
+                    
+                    **Apple Calendar:**
+                    1. Open Calendar app
+                    2. Go to File → Import
+                    3. Select the downloaded .ics file
+                    """)
+            
+            with st.expander("📊 How to open CSV files"):
+                    st.markdown("""
+                    **Microsoft Excel:**
+                    1. Open Excel
+                    2. Go to File → Open
+                    3. Select the downloaded .csv file
+                    
+                    **Google Sheets:**
+                    1. Open Google Sheets
+                    2. Go to File → Import
+                    3. Upload the .csv file
+                    
+                    **Double-click:**
+                    - Most systems will open CSV files in your default spreadsheet app
+                    """)
+        else:
+            st.info("📋 Generate a schedule first to enable export options")
+    with tabs[4]:
         st.markdown("""
         <div style="background-color: rgb(16, 185, 129); padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
             <h2 style="color: white; margin: 0;">📚 Help & Documentation</h2>
@@ -658,7 +817,7 @@ with tables:
             st.markdown("""
             ### 👋 Welcome to Autrans!
             
-            Autrans is a simple yet powerful tool designed to take the headache out of trip scheduling with your friends.
+            Autrans is a simple yet powerful tool designed to take the headache out of scheduling with your ~~workers~~ friends.
             
             In just a few clicks, you can define your time range, list your tasks, and assign available people.
             
