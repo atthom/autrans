@@ -206,6 +206,50 @@ def add_worker():
     next_number = len(st.session_state['workers']) + 1
     st.session_state['workers'].append((f"Person {next_number}", []))
 
+def del_hard_constraint(i):
+    st.session_state['hard_constraints'] = [c for (j, c) in enumerate(st.session_state['hard_constraints']) if j != i]
+
+def del_soft_constraint(i):
+    st.session_state['soft_constraints'] = [c for (j, c) in enumerate(st.session_state['soft_constraints']) if j != i]
+
+def add_hard_constraint():
+    if len(st.session_state['hard_constraints']) >= 6:
+        setting_error("All constraints are already added")
+        return
+    
+    # Find first available constraint
+    all_constraints = ["Task Coverage", "No Consecutive Tasks", "Days Off", 
+                      "Overall Equity", "Daily Equity", "Task Diversity"]
+    used = st.session_state['hard_constraints'] + st.session_state['soft_constraints']
+    available = [c for c in all_constraints if c not in used]
+    
+    if available:
+        st.session_state['hard_constraints'].append(available[0])
+    else:
+        setting_error("All constraints are already added")
+
+def add_soft_constraint():
+    if len(st.session_state['soft_constraints']) >= 6:
+        setting_error("All constraints are already added")
+        return
+    
+    # Find first available constraint
+    all_constraints = ["Task Coverage", "No Consecutive Tasks", "Days Off",
+                      "Overall Equity", "Daily Equity", "Task Diversity"]
+    used = st.session_state['hard_constraints'] + st.session_state['soft_constraints']
+    available = [c for c in all_constraints if c not in used]
+    
+    if available:
+        st.session_state['soft_constraints'].append(available[0])
+    else:
+        setting_error("All constraints are already added")
+
+def move_soft_constraint_up(i):
+    if i > 0:
+        constraints = st.session_state['soft_constraints']
+        constraints[i], constraints[i-1] = constraints[i-1], constraints[i]
+        st.session_state['soft_constraints'] = constraints
+
 def display_general_settings():
     settings_row = st.columns([3, 3, 3], vertical_alignment="center")
     
@@ -355,18 +399,6 @@ if True:
 st.markdown("<h1 style='text-align: center;'>Autrans</h1>", unsafe_allow_html=True)
 st.markdown("<h2 style='text-align: center;'>Automated Scheduling Tool</h2>", unsafe_allow_html=True)
 
-st.header("👋 Welcome to Autrans !")
-
-st.markdown("""
-Autrans is a simple yet powerful tool designed to take the headache out of trip scheduling with your friends. <br>
-In just a few clicks, you can define your time range, list your tasks, and assign available <del>workers</del> people.<br>
-Autrans automatically generates an optimized plan where: <br>
-- Each people will have a fair share of the workload
-- Each people will participate to each task
-- <del>Workers</del> People can take days-offs, and the workload will be adjusted accordingly.
- <br>
-""", unsafe_allow_html=True)
-
 
 settings, tables = st.columns([4, 8])
 
@@ -386,6 +418,113 @@ with settings:
     
     workers, _ = zip(*st.session_state["workers"])
     workers = list(workers)
+    
+    with st.container(border=True):
+        with st.expander("🔧 Advanced Settings", expanded=True):
+            # Initialize constraint lists if not present
+            if 'hard_constraints' not in st.session_state:
+                st.session_state['hard_constraints'] = [
+                    "Task Coverage",
+                    "No Consecutive Tasks", 
+                    "Days Off"
+                ]
+            
+            if 'soft_constraints' not in st.session_state:
+                st.session_state['soft_constraints'] = [
+                    "Overall Equity",
+                    "Daily Equity",
+                    "Task Diversity"
+                ]
+            
+            # Available constraint options with descriptions
+            constraint_options = {
+                "Task Coverage": "Each task must have the required number of workers",
+                "No Consecutive Tasks": "Workers do at most one task per day",
+                "Days Off": "Workers cannot work on their days off",
+                "Overall Equity": "Fair distribution of total workload",
+                "Daily Equity": "Similar amount of work per day",
+                "Task Diversity": "Everyone participates in each task"
+            }
+            
+            st.markdown("#### Hard Constraints")
+            st.markdown("*Must be satisfied for a valid schedule*")
+            
+            # Display hard constraints or empty state
+            if len(st.session_state['hard_constraints']) == 0:
+                st.info("ℹ️ No hard constraints selected. Click 'Add Hard Constraint' to add one.")
+            
+            for i, constraint in enumerate(st.session_state['hard_constraints']):
+                constraint_row = st.columns([4, 1], vertical_alignment="bottom")
+                
+                # Get available options (exclude already selected constraints except current)
+                used_constraints = (st.session_state['hard_constraints'][:i] + 
+                                  st.session_state['hard_constraints'][i+1:] +
+                                  st.session_state['soft_constraints'])
+                available = [c for c in constraint_options.keys() if c not in used_constraints or c == constraint]
+                
+                selected = constraint_row[0].selectbox(
+                    f"Hard constraint {i}",
+                    options=available,
+                    index=available.index(constraint) if constraint in available else 0,
+                    key=f"hard_constraint_{i}",
+                    help=constraint_options.get(constraint, ""),
+                    label_visibility="collapsed"
+                )
+                st.session_state['hard_constraints'][i] = selected
+                
+                constraint_row[1].button("", icon=":material/close:", type="secondary",
+                                       key=f"del_hard_constraint_{i}", use_container_width=True,
+                                       on_click=del_hard_constraint, args=[i])
+            
+            # Add hard constraint button
+            row_add_hard = st.columns([1, 3, 1])
+            row_add_hard[1].button("Add Hard Constraint", icon=":material/add:", 
+                                  type="primary", key="btn_add_hard_constraint",
+                                  on_click=add_hard_constraint, use_container_width=True)
+            
+            st.markdown("#### Soft Constraints")
+            st.markdown("*Relaxed if needed (order matters: first = highest priority)*")
+            
+            # Display soft constraints or empty state
+            if len(st.session_state['soft_constraints']) == 0:
+                st.info("ℹ️ No soft constraints selected. Click 'Add Soft Constraint' to add one.")
+            
+            for i, constraint in enumerate(st.session_state['soft_constraints']):
+                constraint_row = st.columns([4, 1, 1], vertical_alignment="bottom")
+                
+                # Get available options
+                used_constraints = (st.session_state['hard_constraints'] +
+                                  st.session_state['soft_constraints'][:i] +
+                                  st.session_state['soft_constraints'][i+1:])
+                available = [c for c in constraint_options.keys() if c not in used_constraints or c == constraint]
+                
+                selected = constraint_row[0].selectbox(
+                    f"Soft constraint {i}",
+                    options=available,
+                    index=available.index(constraint) if constraint in available else 0,
+                    key=f"soft_constraint_{i}",
+                    help=constraint_options.get(constraint, ""),
+                    label_visibility="collapsed"
+                )
+                st.session_state['soft_constraints'][i] = selected
+                
+                # Move up/down buttons
+                if i > 0:
+                    constraint_row[1].button("", icon=":material/arrow_upward:", type="secondary",
+                                           key=f"move_up_soft_{i}", use_container_width=True,
+                                           on_click=move_soft_constraint_up, args=[i])
+                else:
+                    constraint_row[1].empty()
+                
+                constraint_row[2].button("", icon=":material/close:", type="secondary",
+                                       key=f"del_soft_constraint_{i}", use_container_width=True,
+                                       on_click=del_soft_constraint, args=[i])
+            
+            # Add soft constraint button
+            row_add_soft = st.columns([1, 3, 1])
+            row_add_soft[1].button("Add Soft Constraint", icon=":material/add:",
+                                  type="primary", key="btn_add_soft_constraint",
+                                  on_click=add_soft_constraint, use_container_width=True)
     
     with st.container(border=True):
         row4 = st.text_input("State Input")
@@ -434,12 +573,28 @@ if submit:
             w_days_off_idx = []
         workers.append((w_name, w_days_off_idx))
 
+    # Build constraint name lists from UI selections
+    # Map display names to backend names
+    constraint_name_map = {
+        "Task Coverage": "TaskCoverage",
+        "No Consecutive Tasks": "NoConsecutiveTasks",
+        "Days Off": "DaysOff",
+        "Overall Equity": "OverallEquity",
+        "Daily Equity": "DailyEquity",
+        "Task Diversity": "TaskDiversity"
+    }
+    
+    hard_constraints = [constraint_name_map[c] for c in st.session_state.get('hard_constraints', [])]
+    soft_constraints = [constraint_name_map[c] for c in st.session_state.get('soft_constraints', [])]
+    
     payload = {
         "workers": workers,
         "tasks": all_tasks,
         "nb_days": nb_days,
         "task_per_day": [b[0] for b in all_tasks],
-        "balance_daysoff": balance_daysoff
+        "balance_daysoff": balance_daysoff,
+        "hard_constraints": hard_constraints,
+        "soft_constraints": soft_constraints
     }
 
     print(payload)
@@ -472,6 +627,9 @@ if submit:
         st.session_state['export_workers'] = workers
         st.session_state['export_tasks'] = all_tasks
         st.session_state['export_balance'] = balance_daysoff
+        
+        # Set flag to show schedule tab
+        st.session_state['show_schedule'] = True
     else:
         # Pass detailed diagnostics if available
         details = sat_agg.get("details", None)
@@ -480,18 +638,308 @@ if submit:
 
 with tables:
     with st.container(border=True):
-        tabs = st.tabs(["Schedule", "Grid", "Audit", "Export"])
+        tabs = st.tabs(["Help", "Schedule", "Grid", "Audit", "Export"])
+    
+    # Determine which tab to show
+    if 'schedule_df' in st.session_state and st.session_state.get('show_schedule', False):
+        selected_tab = 1  # Schedule tab
+    else:
+        selected_tab = 0  # Help tab (default)
+    
     with tabs[0]:
+        st.markdown("""
+        <div style="background-color: rgb(16, 185, 129); padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
+            <h2 style="color: white; margin: 0;">📚 Help & Documentation</h2>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Getting Started
+        with st.expander("🚀 Getting Started", expanded=True):
+            st.markdown("""
+            ### 👋 Welcome to Autrans!
+            
+            Autrans is a simple yet powerful tool designed to take the headache out of trip scheduling with your friends.
+            
+            In just a few clicks, you can define your time range, list your tasks, and assign available people.
+            
+            **Autrans automatically generates an optimized plan where:**
+            - Each person will have a fair share of the workload
+            - Each person will participate in each task
+            - People can take days off, and the workload will be adjusted accordingly
+            
+            ---
+            
+            **Basic Workflow:**
+            1. **Configure Settings** (left panel): Set your trip name, dates, and duration
+            2. **Define Tasks**: Add the tasks that need to be done (cooking, cleaning, etc.)
+            3. **Add Workers**: List all participants and their availability
+            4. **Adjust Constraints** (optional): Fine-tune how the schedule is generated
+            5. **Click Submit**: Generate your optimized schedule!
+            6. **View & Export**: Check the results and export to your calendar
+            
+            **Quick Tips:**
+            - Start with the default settings to see how it works
+            - The system automatically ensures fairness and task coverage
+            - You can customize everything to match your group's needs
+            """)
+        
+        # Understanding Results
+        with st.expander("📊 Understanding Results"):
+            st.markdown("""
+            ### How to Read Your Schedule
+            
+            After clicking Submit, you'll see several views of your schedule:
+            
+            **Schedule Tab** 📅
+            - Visual calendar showing who does what each day
+            - Color-coded by task for easy reading
+            - Shows actual dates and day names
+            
+            **Grid Tab** 📋
+            - Table format: Tasks × Days
+            - Shows worker assignments for each task/day combination
+            - Compact view of the entire schedule
+            
+            **Audit Tab** 📈
+            - **Schedule**: Same as Grid tab
+            - **Affectation per day**: How many tasks each person does per day
+            - **Affectation per task**: How many times each person does each task
+            - **Legend**: `*` indicates days off were involved
+            
+            **Export Tab** 💾
+            - Download as iCalendar (.ics) for Outlook, Google Calendar, Apple Calendar
+            - Download as CSV for Excel, Google Sheets
+            - Filenames include trip name, date, and duration
+            """)
+        
+        # General Settings
+        with st.expander("⚙️ General Settings"):
+            st.markdown("""
+            ### Trip Configuration
+            
+            **Trip Name**
+            - Give your trip a memorable name
+            - Used in exported filenames
+            - Example: "Summer Cabin 2026"
+            
+            **Start Date**
+            - When does your trip begin?
+            - Used to generate actual calendar dates
+            - Helps with planning and coordination
+            
+            **Duration (days)**
+            - How many days is your trip?
+            - Maximum: 20 days
+            - Affects workload distribution
+            """)
+        
+        # Tasks Section
+        with st.expander("📋 Tasks"):
+            st.markdown("""
+            ### Defining Your Tasks
+            
+            **What are Tasks?**
+            - Activities that need to be done during your trip
+            - Examples: Cooking, Cleaning, Shopping, Dishes, Trash
+            - Each task can require multiple workers
+            
+            **Task Settings:**
+            - **Name**: What the task is called
+            - **Workers Needed**: How many people are required (e.g., 2 for cooking)
+            - **Color**: Visual identifier in the schedule
+            - **Range** (optional): Limit task to specific days
+            
+            **Tips:**
+            - Be specific: "Breakfast" and "Dinner" instead of just "Cooking"
+            - Consider task duration: Some tasks need more people
+            - Use colors to group related tasks
+            - You can have up to 20 tasks
+            """)
+        
+        # Workers Section
+        with st.expander("👥 Workers & Balance"):
+            st.markdown("""
+            ### Managing Participants
+            
+            **Adding Workers:**
+            - List everyone participating in the trip
+            - Each person can have days off
+            - You can have up to 20 workers
+            
+            **Days Off:**
+            - Select days when someone is unavailable
+            - They won't be assigned tasks on those days
+            - Affects workload distribution (see Balance below)
+            
+            ---
+            
+            ### ⚖️ Balance Settings - Why It Matters
+            
+            The Balance setting determines how workload is distributed when people have different availability.
+            
+            **"Days off" Balance** (Recommended) ✅
+            - Workers work **proportionally to their available days**
+            - **Fair**: People with fewer available days do less work
+            - **Example**: 
+              - Alice: 7 working days → 100% workload
+              - Bob: 5 working days (2 days off) → 71% workload
+              - Bob does 71% of Alice's work (5/7 = 0.71)
+            
+            **"Ignore days off" Balance**
+            - Everyone works **equally regardless of days off**
+            - **Equal**: Same total workload for everyone
+            - **Example**:
+              - Alice: 7 working days → 100% workload
+              - Bob: 5 working days (2 days off) → 100% workload
+              - Bob does the same amount as Alice, but in fewer days
+            
+            **When to Use Each:**
+            - **Days off**: Most fair for trips where availability varies
+            - **Ignore days off**: When you want strict equality regardless of circumstances
+            
+            **Why It Matters:**
+            - Affects team morale and perceived fairness
+            - Impacts schedule feasibility (tight schedules may need "Ignore days off")
+            - Consider your group's preferences and dynamics
+            """)
+        
+        # Advanced Settings
+        with st.expander("🔧 Advanced Settings - Constraints"):
+            st.markdown("""
+            ### Understanding Constraints
+            
+            Constraints are **rules** that govern how your schedule is created. They ensure fairness, respect availability, and meet your requirements.
+            
+            ---
+            
+            ### Hard vs Soft Constraints
+            
+            **Hard Constraints** 🔴
+            - **MUST be satisfied** for a valid schedule
+            - If impossible, the schedule will fail
+            - Use for non-negotiable requirements
+            - Example: "Tasks must be covered" is typically hard
+            
+            **Soft Constraints** 🟡
+            - **Preferred but flexible**
+            - Can be relaxed if needed to find a solution
+            - **Order matters**: First = highest priority
+            - Use the ↑ button to reorder priorities
+            
+            **When to Use Each:**
+            - Hard: Absolute requirements (safety, coverage, availability)
+            - Soft: Preferences and optimization goals (fairness, diversity)
+            
+            ---
+            
+            ### Available Constraints
+            
+            **Task Coverage** 📋
+            - **What**: Each task has the required number of workers
+            - **Hard**: Tasks must be fully covered (no understaffing)
+            - **Soft**: Tasks can be under-covered if necessary
+            - **Why**: Ensures all work gets done
+            - **Example**: If "Cooking" needs 2 people, exactly 2 are assigned
+            
+            **No Consecutive Tasks** 🚫
+            - **What**: Workers do at most one task per day
+            - **Hard**: Strict limit of 1 task/day
+            - **Soft**: Can do multiple tasks if needed
+            - **Why**: Prevents burnout and overwork
+            - **Example**: Alice does Cooking OR Cleaning, not both
+            
+            **Days Off** 🏖️
+            - **What**: Workers cannot work on their days off
+            - **Hard**: Strictly respect days off
+            - **Soft**: Can work on days off if absolutely necessary
+            - **Why**: Respects personal plans and availability
+            - **Example**: Bob has Monday off, so he's not assigned Monday tasks
+            
+            **Overall Equity** ⚖️
+            - **What**: Fair distribution of total workload
+            - **Hard**: Strict equality (everyone does similar total work)
+            - **Soft**: Approximate equality (some variation allowed)
+            - **Why**: Ensures no one is overworked
+            - **Example**: Over 7 days, everyone does 6-8 tasks (not 2 vs 12)
+            
+            **Daily Equity** 📅
+            - **What**: Similar amount of work each day
+            - **Hard**: Strict daily limits
+            - **Soft**: Flexible daily limits
+            - **Why**: Prevents exhausting days
+            - **Example**: No one does 3 tasks in one day while others do 0
+            
+            **Task Diversity** 🎯
+            - **What**: Everyone participates in each task type
+            - **Hard**: Strict participation requirements
+            - **Soft**: Approximate participation
+            - **Why**: Variety and skill sharing
+            - **Example**: Everyone cooks at least once, not just 2 people cooking all week
+            
+            ---
+            
+            ### Choosing Your Constraints
+            
+            **Recommended Starting Point:**
+            - **Hard**: Task Coverage, No Consecutive Tasks, Days Off
+            - **Soft**: Overall Equity, Daily Equity, Task Diversity
+            
+            **Common Adjustments:**
+            - Tight schedule? Make "No Consecutive Tasks" soft
+            - Flexible group? Make "Days Off" soft
+            - Want strict fairness? Make equity constraints hard
+            - Prefer flexibility? Use more soft constraints
+            
+            **Priority Order (Soft Constraints):**
+            - First constraint = highest priority (relaxed last)
+            - Last constraint = lowest priority (relaxed first)
+            - Use ↑ button to reorder
+            - Example: If Overall Equity is first, it's protected the most
+            """)
+        
+        # Tips and Tricks
+        with st.expander("💡 Tips & Tricks"):
+            st.markdown("""
+            ### Getting the Best Results
+            
+            **For Feasible Schedules:**
+            - Ensure enough workers for your tasks
+            - Don't over-constrain (too many hard constraints)
+            - Check capacity: (tasks × workers needed × days) ≤ (workers × available days)
+            
+            **For Fair Schedules:**
+            - Use "Days off" balance mode
+            - Keep Overall Equity as a constraint
+            - Enable Task Diversity
+            
+            **For Flexible Schedules:**
+            - Use more soft constraints
+            - Make "No Consecutive Tasks" soft
+            - Adjust constraint priorities
+            
+            **Troubleshooting:**
+            - **"Schedule not feasible"**: Reduce hard constraints or add more workers
+            - **Unfair distribution**: Check balance mode and equity constraints
+            - **Someone overworked**: Enable Daily Equity constraint
+            - **Tasks not covered**: Ensure Task Coverage is enabled
+            
+            **State Management:**
+            - Use "Copy State" to save your configuration
+            - Share the state code with your group
+            - Use "Load State" to restore a saved configuration
+            """)
+    
+    with tabs[1]:
         schedule_placeholder = st.empty()
         if 'schedule_df' in st.session_state:
             make_schedule(schedule_placeholder, st.session_state['schedule_df'], st.session_state['schedule_colors'])
         else:
             schedule_placeholder.markdown("Your schedule is here")
-    with tabs[1]:
+    with tabs[2]:
         schedule_grid = make_table("Schedule", ["Tasks"] + selected_days)
         if 'grid_data' in st.session_state:
             set_df(schedule_grid, st.session_state['grid_data'])
-    with tabs[2]:
+    with tabs[3]:
         schedule_grid_audit = make_table("Schedule", ["Tasks"] + selected_days)
         if 'grid_data' in st.session_state:
             set_df(schedule_grid_audit, st.session_state['grid_data'])
@@ -517,7 +965,7 @@ with tables:
         - Numbers with * indicate work done despite having days off in that period
         - TOTAL row/column shows the sum across all days/tasks
         """)
-    with tabs[3]:
+    with tabs[4]:
         if 'grid_data' in st.session_state:
             st.markdown("""
             <div style="background-color: rgb(16, 185, 129); padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
@@ -545,10 +993,16 @@ with tables:
                         try:
                             res = requests.post("http://127.0.0.1:8080/export/ics", json=export_payload)
                             if res.status_code == 200:
+                                # Generate filename from trip details
+                                trip_name = st.session_state.get('trip_name', 'My_Trip').replace(' ', '_')
+                                start_date = st.session_state["start_date"].isoformat()
+                                nb_days = st.session_state.get('nb_days', 7)
+                                filename = f"Schedule-{trip_name}-{start_date}-{nb_days}days.ics"
+                                
                                 st.download_button(
-                                    label="💾 Save autrans-schedule.ics",
+                                    label=f"💾 Save {filename}",
                                     data=res.content,
-                                    file_name="autrans-schedule.ics",
+                                    file_name=filename,
                                     mime="text/calendar",
                                     use_container_width=True
                                 )
@@ -570,10 +1024,16 @@ with tables:
                         try:
                             res = requests.post("http://127.0.0.1:8080/export/csv", json=export_payload)
                             if res.status_code == 200:
+                                # Generate filename from trip details
+                                trip_name = st.session_state.get('trip_name', 'My_Trip').replace(' ', '_')
+                                start_date = st.session_state["start_date"].isoformat()
+                                nb_days = st.session_state.get('nb_days', 7)
+                                filename = f"Schedule-{trip_name}-{start_date}-{nb_days}days.csv"
+                                
                                 st.download_button(
-                                    label="💾 Save autrans-schedule.csv",
+                                    label=f"💾 Save {filename}",
                                     data=res.content,
-                                    file_name="autrans-schedule.csv",
+                                    file_name=filename,
                                     mime="text/csv",
                                     use_container_width=True
                                 )
