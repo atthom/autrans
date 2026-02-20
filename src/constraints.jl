@@ -1,9 +1,3 @@
-# Constraint functions for Autrans scheduling
-# Note: Constraint type definitions are in structs.jl
-
-# ============================================================================
-# Constraint Deduplication
-# ============================================================================
 
 """
 Remove duplicate constraints and ensure hard constraints take precedence over soft
@@ -21,9 +15,6 @@ function deduplicate_constraints(hard::Vector{Constraint{Val{:HARD}}},
     return unique_hard, filtered_soft
 end
 
-# ============================================================================
-# Relaxation Hierarchy Generation
-# ============================================================================
 
 """
 Generate relaxation hierarchy based on soft constraints and max level.
@@ -54,16 +45,14 @@ function generate_relaxation_hierarchy(soft_constraints::Vector{Constraint{Val{:
     return hierarchy
 end
 
-# ============================================================================
-# Generic Apply Interface
-# ============================================================================
-
 """
 Apply a hard constraint (no relaxation)
+Delegates to the soft constraint implementation with relaxation=0
 """
 function apply!(model, assign, scheduler::AutransScheduler, 
                 c::Constraint{Val{:HARD}}, N::Int, D::Int, T::Int)
-    result = apply_constraint!(model, assign, scheduler, c.constraint, N, D, T)
+    # Hard constraints are just soft constraints with relaxation=0
+    result = apply_constraint!(model, assign, scheduler, c.constraint, N, D, T, 0)
     # Only return if it's a valid objective expression (not constraints)
     return result isa Union{JuMP.AffExpr, JuMP.QuadExpr, Number} ? result : nothing
 end
@@ -78,25 +67,10 @@ function apply!(model, assign, scheduler::AutransScheduler,
     return result isa Union{JuMP.AffExpr, JuMP.QuadExpr, Number} ? result : nothing
 end
 
-# ============================================================================
-# Task Coverage Constraint (HARD or SOFT)
-# ============================================================================
-
 """
-As HARD: Each task has exactly the required number of workers on active days
-"""
-function apply_constraint!(model, assign, scheduler::AutransScheduler,
-                          c::TaskCoverageConstraint, N::Int, D::Int, T::Int)
-    for (t, task) in enumerate(scheduler.tasks)
-        for d in 1:D
-            val = d in task.day_range ? task.num_workers : 0
-            @constraint(model, sum(assign[w, d, t] for w in 1:N) == val)
-        end
-    end
-end
-
-"""
-As SOFT: Tasks can be under-covered by up to 'relaxation' workers
+TaskCoverageConstraint implementation
+When relaxation=0: Each task has exactly the required number of workers (hard constraint)
+When relaxation>0: Tasks can be under-covered by up to 'relaxation' workers (soft constraint)
 """
 function apply_constraint!(model, assign, scheduler::AutransScheduler,
                           c::TaskCoverageConstraint, N::Int, D::Int, T::Int, relaxation::Int)
@@ -114,49 +88,21 @@ function apply_constraint!(model, assign, scheduler::AutransScheduler,
     end
 end
 
-# ============================================================================
-# No Consecutive Tasks Constraint (HARD or SOFT)
-# ============================================================================
-
 """
-As HARD: Workers do at most one task per day
-"""
-function apply_constraint!(model, assign, scheduler::AutransScheduler,
-                          c::NoConsecutiveTasksConstraint, N::Int, D::Int, T::Int)
-    @constraint(model, [w=1:N, d=1:D], 
-                sum(assign[w, d, t] for t in 1:T) <= 1)
-end
-
-"""
-As SOFT: Workers can do up to (1 + relaxation) tasks per day
+NoConsecutiveTasksConstraint implementation
+When relaxation=0: Workers do at most one task per day (hard constraint)
+When relaxation>0: Workers can do 1+relaxation tasks per day (soft constraint)
 """
 function apply_constraint!(model, assign, scheduler::AutransScheduler,
                           c::NoConsecutiveTasksConstraint, N::Int, D::Int, T::Int, relaxation::Int)
     max_tasks_per_day = 1 + relaxation
-    @constraint(model, [w=1:N, d=1:D], 
-                sum(assign[w, d, t] for t in 1:T) <= max_tasks_per_day)
-end
-
-# ============================================================================
-# Days Off Constraint (HARD or SOFT)
-# ============================================================================
-
-"""
-As HARD: Workers cannot work on their days off (strict enforcement)
-"""
-function apply_constraint!(model, assign, scheduler::AutransScheduler,
-                          c::DaysOffConstraint, N::Int, D::Int, T::Int)
-    for (w, worker) in enumerate(scheduler.workers)
-        for day in worker.days_off
-            if 1 <= day <= D
-                @constraint(model, [t=1:T], assign[w, day, t] == 0)
-            end
-        end
-    end
+    @constraint(model, [w=1:N, d=1:D], sum(assign[w, d, t] for t in 1:T) <= max_tasks_per_day)
 end
 
 """
-As SOFT: Workers can work on days off but it's limited by relaxation
+DaysOffConstraint implementation
+When relaxation=0: Workers cannot work on their days off (hard constraint)
+When relaxation>0: Workers can work up to 'relaxation' tasks on days off (soft constraint)
 """
 function apply_constraint!(model, assign, scheduler::AutransScheduler,
                           c::DaysOffConstraint, N::Int, D::Int, T::Int, relaxation::Int)
@@ -164,57 +110,16 @@ function apply_constraint!(model, assign, scheduler::AutransScheduler,
         days_off_list = [d for d in worker.days_off if 1 <= d <= D]
         if !isempty(days_off_list)
             # Allow at most 'relaxation' tasks on days off
-            @constraint(model, 
-                sum(assign[w, d, t] for d in days_off_list, t in 1:T) <= relaxation)
+            @constraint(model, sum(assign[w, d, t] for d in days_off_list, t in 1:T) <= relaxation)
         end
     end
 end
 
-# ============================================================================
-# Overall Equity Constraint (HARD or SOFT)
-# ============================================================================
 
 """
-As HARD (Proportional): Workers work exactly proportional to their available days
-"""
-function apply_constraint!(model, assign, scheduler::AutransScheduler{ProportionalEquity},
-                          c::OverallEquityConstraint, N::Int, D::Int, T::Int)
-    total_slots = sum(task.num_workers * length(task.day_range) for task in scheduler.tasks)
-    available_worker_days = sum(D - length(worker.days_off ∩ Set(1:D)) 
-                               for worker in scheduler.workers)
-    
-    if available_worker_days == 0
-        return
-    end
-    
-    for (w, worker) in enumerate(scheduler.workers)
-        work_days = [d for d in 1:D if d ∉ worker.days_off]
-        if !isempty(work_days)
-            expected_float = (length(work_days) / available_worker_days) * total_slots
-            expected = round(Int, expected_float)
-            # Strict: allow ±1 for rounding
-            @constraint(model, sum(assign[w, d, t] for d in 1:D, t in 1:T) >= expected - 1)
-            @constraint(model, sum(assign[w, d, t] for d in 1:D, t in 1:T) <= expected + 1)
-        end
-    end
-end
-
-"""
-As HARD (Absolute): All workers work exactly the same amount
-"""
-function apply_constraint!(model, assign, scheduler::AutransScheduler{AbsoluteEquity},
-                          c::OverallEquityConstraint, N::Int, D::Int, T::Int)
-    total_slots = sum(task.num_workers * length(task.day_range) for task in scheduler.tasks)
-    expected = div(total_slots, N)
-    # Strict: allow ±1 for rounding
-    for w in 1:N
-        @constraint(model, sum(assign[w, d, t] for d in 1:D, t in 1:T) >= expected - 1)
-        @constraint(model, sum(assign[w, d, t] for d in 1:D, t in 1:T) <= expected + 1)
-    end
-end
-
-"""
-As SOFT (Proportional): Workers work proportional to their available days (with relaxation)
+OverallEquityConstraint implementation (Proportional)
+When relaxation=0: Workers work exactly proportional to available days (hard constraint, ±1 for rounding)
+When relaxation>0: Workers work proportional with tolerance (soft constraint)
 """
 function apply_constraint!(model, assign, scheduler::AutransScheduler{ProportionalEquity},
                           c::OverallEquityConstraint, N::Int, D::Int, T::Int, relaxation::Int)
@@ -241,7 +146,9 @@ function apply_constraint!(model, assign, scheduler::AutransScheduler{Proportion
 end
 
 """
-As SOFT (Absolute): All workers work the same amount (with relaxation)
+OverallEquityConstraint implementation (Absolute)
+When relaxation=0: All workers work exactly the same amount (hard constraint, ±1 for rounding)
+When relaxation>0: All workers work similar amounts with tolerance (soft constraint)
 """
 function apply_constraint!(model, assign, scheduler::AutransScheduler{AbsoluteEquity},
                           c::OverallEquityConstraint, N::Int, D::Int, T::Int, relaxation::Int)
@@ -250,42 +157,15 @@ function apply_constraint!(model, assign, scheduler::AutransScheduler{AbsoluteEq
     lower = max(0, expected - relaxation)
     upper = expected + relaxation + 1
     
-    for w in 1:N
-        @constraint(model, sum(assign[w, d, t] for d in 1:D, t in 1:T) >= lower)
-        @constraint(model, sum(assign[w, d, t] for d in 1:D, t in 1:T) <= upper)
-    end
+    @constraint(model, [w in 1:N], sum(assign[w, d, t] for d in 1:D, t in 1:T) >= lower)
+    @constraint(model, [w in 1:N], sum(assign[w, d, t] for d in 1:D, t in 1:T) <= upper)
 end
 
-# ============================================================================
-# Daily Equity Constraint (HARD or SOFT)
-# ============================================================================
 
 """
-As HARD: Workers do similar amounts of work each day (strict limit)
-"""
-function apply_constraint!(model, assign, scheduler::AutransScheduler,
-                          c::DailyEquityConstraint, N::Int, D::Int, T::Int)
-    total_slots = sum(task.num_workers * length(task.day_range) for task in scheduler.tasks)
-    total_worker_days = sum(D - length(worker.days_off ∩ Set(1:D)) 
-                           for worker in scheduler.workers)
-    
-    if total_worker_days == 0
-        return
-    end
-    
-    avg_tasks_per_day = total_slots / total_worker_days
-    max_daily = ceil(Int, avg_tasks_per_day) + 1  # Strict: +1 for rounding
-    
-    for (w, worker) in enumerate(scheduler.workers)
-        work_days = [d for d in 1:D if d ∉ worker.days_off]
-        for d in work_days
-            @constraint(model, sum(assign[w, d, t] for t in 1:T) <= max_daily)
-        end
-    end
-end
-
-"""
-As SOFT: Workers should do similar amounts of work each day (with relaxation)
+DailyEquityConstraint implementation
+When relaxation=0: Workers do similar amounts each day (hard constraint, +1 for rounding)
+When relaxation>0: Workers can do more tasks per day with tolerance (soft constraint)
 """
 function apply_constraint!(model, assign, scheduler::AutransScheduler,
                           c::DailyEquityConstraint, N::Int, D::Int, T::Int, relaxation::Int)
@@ -308,31 +188,10 @@ function apply_constraint!(model, assign, scheduler::AutransScheduler,
     end
 end
 
-# ============================================================================
-# Task Diversity Constraint (HARD or SOFT)
-# ============================================================================
-
 """
-As HARD: Each worker must participate in each task fairly (strict)
-"""
-function apply_constraint!(model, assign, scheduler::AutransScheduler,
-                          c::TaskDiversityConstraint, N::Int, D::Int, T::Int)
-    for (t, task) in enumerate(scheduler.tasks)
-        workload = length(task.day_range) * task.num_workers
-        workload_per_worker = div(workload, N)
-        # Strict: allow ±1 for rounding
-        lower = max(0, workload_per_worker - 1)
-        upper = workload_per_worker + 1
-        
-        for w in 1:N
-            @constraint(model, sum(assign[w, d, t] for d in 1:D) >= lower)
-            @constraint(model, sum(assign[w, d, t] for d in 1:D) <= upper)
-        end
-    end
-end
-
-"""
-As SOFT: Each worker should participate in each task fairly (with relaxation)
+TaskDiversityConstraint implementation
+When relaxation=0: Each worker participates in each task fairly (hard constraint, ±1 for rounding)
+When relaxation>0: Workers can have uneven task participation with tolerance (soft constraint)
 """
 function apply_constraint!(model, assign, scheduler::AutransScheduler,
                           c::TaskDiversityConstraint, N::Int, D::Int, T::Int, relaxation::Int)
@@ -342,16 +201,10 @@ function apply_constraint!(model, assign, scheduler::AutransScheduler,
         lower = max(0, workload_per_worker - relaxation)
         upper = workload_per_worker + 1 + relaxation
         
-        for w in 1:N
-            @constraint(model, sum(assign[w, d, t] for d in 1:D) >= lower)
-            @constraint(model, sum(assign[w, d, t] for d in 1:D) <= upper)
-        end
+        @constraint(model, [w in 1:N], sum(assign[w, d, t] for d in 1:D) >= lower)
+        @constraint(model, [w in 1:N], sum(assign[w, d, t] for d in 1:D) <= upper)
     end
 end
-
-# ============================================================================
-# Worker Preference Constraint (HARD or SOFT)
-# ============================================================================
 
 """
 Build preference penalty matrix for workers.
@@ -385,34 +238,19 @@ function build_preference_penalties(scheduler::AutransScheduler, N::Int, T::Int)
 end
 
 """
-As HARD: Strong preference enforcement (high penalty multiplier)
-Returns the penalty expression to be added to the objective function.
-"""
-function apply_constraint!(model, assign, scheduler::AutransScheduler,
-                          c::WorkerPreferenceConstraint, N::Int, D::Int, T::Int)
-    penalties = build_preference_penalties(scheduler, N, T)
-    
-    # High penalty multiplier for hard constraint (10x)
-    penalty_weight = 10
-    
-    # Return penalty expression: sum of (penalty * assignment) for all worker-day-task combinations
-    return penalty_weight * sum(penalties[w, t] * assign[w, d, t] 
-                               for w in 1:N, d in 1:D, t in 1:T)
-end
-
-"""
-As SOFT: Moderate preference enforcement (lower penalty, affected by relaxation)
+WorkerPreferenceConstraint implementation
+When relaxation=0: Strong preference enforcement with high penalty (hard constraint)
+When relaxation>0: Moderate preference enforcement with lower penalty (soft constraint)
 Returns the penalty expression to be added to the objective function.
 """
 function apply_constraint!(model, assign, scheduler::AutransScheduler,
                           c::WorkerPreferenceConstraint, N::Int, D::Int, T::Int, relaxation::Int)
     penalties = build_preference_penalties(scheduler, N, T)
     
-    # Lower penalty multiplier for soft constraint, reduced by relaxation
-    # Base weight of 2, reduced as relaxation increases
-    penalty_weight = max(0.1, 2.0 - relaxation * 0.3)
+    # Penalty weight depends on relaxation
+    # relaxation=0 (hard): high weight (10x)
+    # relaxation>0 (soft): lower weight, reduced by relaxation
+    penalty_weight = ifelse(relaxation == 0, 10.0, max(0.1, 2.0 - relaxation * 0.3))
     
-    # Return penalty expression
-    return penalty_weight * sum(penalties[w, t] * assign[w, d, t] 
-                               for w in 1:N, d in 1:D, t in 1:T)
+    return penalty_weight * sum(penalties[w, t] * assign[w, d, t] for w in 1:N, d in 1:D, t in 1:T)
 end

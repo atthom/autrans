@@ -53,6 +53,63 @@ function create_model(scheduler::AutransScheduler, N, D, T)
 end
 
 """
+Extract solution from solved model
+Returns (solution, status_str) where solution is nothing if no valid solution found
+"""
+function extract_solution(model, assign)
+    status = termination_status(model)
+    status_str = string(status)
+    
+    if status == MOI.OPTIMAL || status == MOI.LOCALLY_SOLVED || 
+       (status == MOI.TIME_LIMIT && has_values(model))
+        return (round.(Int, value.(assign)), status_str)
+    else
+        return (nothing, status_str)
+    end
+end
+
+"""
+Apply hard constraints and collect objective terms
+Returns vector of objective terms from hard constraints
+"""
+function apply_hard_constraints(model, assign, scheduler::AutransScheduler, N::Int, D::Int, T::Int)
+    objective_terms = []
+    
+    for constraint in scheduler.hard_constraints
+        result = apply!(model, assign, scheduler, constraint, N, D, T)
+        if result !== nothing
+            push!(objective_terms, result)
+        end
+    end
+    
+    return objective_terms
+end
+
+"""
+Apply soft constraints with relaxation and build objective function
+"""
+function apply_soft_constraints_and_build_objective!(model, assign, scheduler::AutransScheduler,
+                                                     N::Int, D::Int, T::Int,
+                                                     relaxation_levels::Vector{Int},
+                                                     base_objective_terms::Vector=[])
+    objective_terms = copy(base_objective_terms)
+    
+    # Apply soft constraints with relaxation
+    for (i, constraint) in enumerate(scheduler.soft_constraints)
+        relaxation = relaxation_levels[i]
+        result = apply!(model, assign, scheduler, constraint, N, D, T, relaxation)
+        if result !== nothing
+            push!(objective_terms, result)
+        end
+    end
+    
+    # Set objective function if there are any objective terms
+    if !isempty(objective_terms)
+        @objective(model, Min, sum(objective_terms))
+    end
+end
+
+"""
 Quick feasibility check before attempting full solve
 Returns (is_feasible, reason)
 """
@@ -79,6 +136,54 @@ function quick_feasibility_check(scheduler::AutransScheduler)
     end
     
     return (true, "")
+end
+
+"""
+Solve at a specific relaxation level (creates new model each time)
+Returns a tuple: (solution, status_str)
+"""
+function solve_at_level(scheduler::AutransScheduler, N::Int, D::Int, T::Int, 
+                       relaxation_levels::Vector{Int}, level_idx::Int)
+    # Create model
+    model, assign = create_model(scheduler, N, D, T)
+    
+    # Apply hard constraints and collect their objectives
+    base_objective_terms = apply_hard_constraints(model, assign, scheduler, N, D, T)
+    
+    # Apply soft constraints and build objective
+    apply_soft_constraints_and_build_objective!(model, assign, scheduler, N, D, T,
+                                               relaxation_levels, base_objective_terms)
+    
+    # Solve and extract solution
+    optimize!(model)
+    return extract_solution(model, assign)
+end
+
+"""
+Create a model with hard constraints already applied
+Returns (model, assign, objective_terms_from_hard_constraints)
+"""
+function create_model_with_hard_constraints(scheduler::AutransScheduler, N::Int, D::Int, T::Int)
+    model, assign = create_model(scheduler, N, D, T)
+    objective_terms = apply_hard_constraints(model, assign, scheduler, N, D, T)
+    return model, assign, objective_terms
+end
+
+"""
+Solve at a specific relaxation level using a pre-built model with hard constraints
+Returns a tuple: (solution, status_str)
+"""
+function solve_at_level_with_model(model, assign, scheduler::AutransScheduler, 
+                                   N::Int, D::Int, T::Int,
+                                   base_objective_terms::Vector,
+                                   relaxation_levels::Vector{Int})
+    # Apply soft constraints and build objective
+    apply_soft_constraints_and_build_objective!(model, assign, scheduler, N, D, T,
+                                               relaxation_levels, base_objective_terms)
+    
+    # Solve and extract solution
+    optimize!(model)
+    return extract_solution(model, assign)
 end
 
 """
@@ -127,109 +232,116 @@ function solve(scheduler::AutransScheduler)
     
     # Generate relaxation hierarchy based on soft constraints
     hierarchy = generate_relaxation_hierarchy(scheduler.soft_constraints, scheduler.max_relaxation_level)
+    max_level = length(hierarchy)
     
-    # Try each relaxation level
-    all_failures = FailureInfo[]
-    
-    for (level_idx, relaxation_levels) in enumerate(hierarchy)
-        if scheduler.verbose
-            println("\n" * "-"^80)
-            println("RELAXATION LEVEL $level_idx")
-            println("-"^80)
-            for (i, constraint) in enumerate(scheduler.soft_constraints)
-                println("$(constraint.name): relaxation = $(relaxation_levels[i])")
-            end
-            println()
-        end
-        
-        # Create model
-        model, assign = create_model(scheduler, N, D, T)
-        
-        # Collect objective terms (for preference constraints)
-        objective_terms = []
-        
-        # Apply hard constraints
-        for constraint in scheduler.hard_constraints
-            if scheduler.verbose
-                println("Applying HARD: $(constraint.name)")
-            end
-            result = apply!(model, assign, scheduler, constraint, N, D, T)
-            
-            # If constraint returns an objective term, collect it
-            if result !== nothing
-                push!(objective_terms, result)
-            end
-        end
-        
-        # Apply soft constraints with relaxation
-        for (i, constraint) in enumerate(scheduler.soft_constraints)
-            relaxation = relaxation_levels[i]
-            
-            if scheduler.verbose
-                println("Applying SOFT: $(constraint.name) (relaxation=$relaxation)")
-            end
-            
-            # Apply with relaxation (even if 0, the constraint handles it)
-            result = apply!(model, assign, scheduler, constraint, N, D, T, relaxation)
-            
-            # If constraint returns an objective term, collect it
-            if result !== nothing
-                push!(objective_terms, result)
-            end
-        end
-        
-        # Set objective function if there are any objective terms
-        if !isempty(objective_terms)
-            @objective(model, Min, sum(objective_terms))
-            if scheduler.verbose
-                println("Objective: Minimize preference penalties")
-            end
-        end
-        
-        if scheduler.verbose
-            println()
-        end
-        
-        # Solve
-        optimize!(model)
-        
-        status = termination_status(model)
-        status_str = string(status)
-        
-        if status == MOI.OPTIMAL || status == MOI.LOCALLY_SOLVED || 
-           (status == MOI.TIME_LIMIT && has_values(model))
-            if scheduler.verbose
-                println("✅ SOLUTION FOUND at relaxation level $level_idx")
-                println("Status: $status_str")
-            end
-            return (round.(Int, value.(assign)), nothing)
-        else
-            if scheduler.verbose
-                println("❌ FAILED at relaxation level $level_idx")
-                println("Status: $status_str")
-            end
-            
-            # Build constraint details for this level
-            constraint_details = String[]
-            for (i, constraint) in enumerate(scheduler.soft_constraints)
-                push!(constraint_details, "$(constraint.name): relaxation = $(relaxation_levels[i])")
-            end
-            
-            push!(all_failures, FailureInfo(
-                level_idx,
-                status_str,
-                capacity_analysis,
-                constraint_details
-            ))
-        end
-    end
-    
-    # All levels failed
     if scheduler.verbose
         println("\n" * "="^80)
-        println("❌ NO SOLUTION FOUND AT ANY RELAXATION LEVEL")
+        println("ADAPTIVE RELAXATION STRATEGY")
+        println("="^80)
+        println("Max relaxation levels: $max_level")
         println("="^80)
     end
     
-    return (nothing, all_failures[end])
+    # Step 1: Try strictest constraints first (level 1) - most common case
+    if scheduler.verbose
+        println("\nStep 1: Testing strictest constraints (level 1)...")
+    end
+    
+    solution, status_str = solve_at_level(scheduler, N, D, T, hierarchy[1], 1)
+    
+    if solution !== nothing
+        # Success at level 1 - optimal solution!
+        if scheduler.verbose
+            println("✅ OPTIMAL SOLUTION at level 1 (strictest constraints)")
+        end
+        return (solution, nothing)
+    end
+    
+    if scheduler.verbose
+        println("❌ Failed at level 1, using model reuse with binary search...")
+        println("\nCreating reusable model with hard constraints...")
+    end
+    
+    # Create model once with hard constraints (reuse for all relaxation levels)
+    model, assign, base_objective_terms = create_model_with_hard_constraints(scheduler, N, D, T)
+    
+    # Step 2: Try maximum relaxation to check feasibility
+    if scheduler.verbose
+        println("\nStep 2: Testing maximum relaxation (level $max_level)...")
+    end
+    
+    solution, status_str = solve_at_level_with_model(model, assign, scheduler, N, D, T, 
+                                                     base_objective_terms, hierarchy[max_level])
+    
+    if solution === nothing
+        # Even max relaxation failed - truly infeasible
+        if scheduler.verbose
+            println("❌ INFEASIBLE even at maximum relaxation")
+            println("Status: $status_str")
+        end
+        
+        constraint_details = String[]
+        for (i, constraint) in enumerate(scheduler.soft_constraints)
+            push!(constraint_details, "$(constraint.name): relaxation = $(hierarchy[max_level][i])")
+        end
+        
+        failure_info = FailureInfo(max_level, status_str, capacity_analysis, constraint_details)
+        return (nothing, failure_info)
+    end
+    
+    if scheduler.verbose
+        println("✅ Feasible at maximum relaxation")
+    end
+    
+    # Step 3: Binary search for minimum relaxation needed (between 2 and max_level)
+    # Reuse the same model for all binary search iterations!
+    if scheduler.verbose
+        println("\nStep 3: Binary search with model reuse...")
+    end
+    
+    low, high = 2, max_level
+    best_solution = solution
+    best_level = max_level
+    
+    while low <= high
+        mid = div(low + high, 2)
+        
+        if scheduler.verbose
+            println("  Testing level $mid (range: $low-$high)...")
+        end
+        
+        solution, status_str = solve_at_level_with_model(model, assign, scheduler, N, D, T,
+                                                         base_objective_terms, hierarchy[mid])
+        
+        if solution !== nothing
+            # Found solution at this level - try tighter constraints
+            best_solution = solution
+            best_level = mid
+            high = mid - 1
+            
+            if scheduler.verbose
+                println("  ✅ Feasible - trying tighter")
+            end
+        else
+            # Need more relaxation
+            low = mid + 1
+            
+            if scheduler.verbose
+                println("  ❌ Infeasible - need more relaxation")
+            end
+        end
+    end
+    
+    if scheduler.verbose
+        println("\n" * "="^80)
+        println("✅ SOLUTION FOUND")
+        println("="^80)
+        println("Relaxation level: $best_level")
+        for (i, constraint) in enumerate(scheduler.soft_constraints)
+            println("  $(constraint.name): relaxation = $(hierarchy[best_level][i])")
+        end
+        println("="^80)
+    end
+    
+    return (best_solution, nothing)
 end

@@ -77,6 +77,95 @@ function build_constraints(hard_names, soft_names)
 end
 
 """
+Parse request body and create scheduler with all parameters
+Returns (scheduler, params, error_response)
+- If successful: (scheduler, params_dict, nothing)
+- If error: (nothing, nothing, error_response)
+"""
+function parse_request_and_create_scheduler(req::HTTP.Request; max_solve_time=300.0)
+    try
+        body = JSON3.read(String(req.body))
+        
+        # Parse workers and tasks
+        workers = parse_workers(body.workers)
+        tasks = parse_tasks(body.tasks)
+        nb_days = body.nb_days
+        balance_daysoff = get(body, :balance_daysoff, false)
+        
+        # Get constraints
+        hard_names = get(body, :hard_constraints, ["TaskCoverage", "NoConsecutiveTasks", "DaysOff"])
+        soft_names = get(body, :soft_constraints, ["OverallEquity", "DailyEquity", "TaskDiversity"])
+        hard_constraints, soft_constraints = build_constraints(hard_names, soft_names)
+        
+        # Create scheduler
+        equity_strategy = balance_daysoff ? :proportional : :absolute
+        scheduler = AutransScheduler(
+            workers, tasks, nb_days,
+            equity_strategy=equity_strategy,
+            max_solve_time=max_solve_time,
+            verbose=false,
+            hard_constraints=hard_constraints,
+            soft_constraints=soft_constraints
+        )
+        
+        # Additional params (for export endpoints)
+        params = Dict(
+            "start_date" => get(body, :start_date, string(today())),
+            "trip_name" => get(body, :trip_name, "Schedule"),
+            "nb_days" => nb_days
+        )
+        
+        return (scheduler, params, nothing)
+        
+    catch e
+        @error "Error parsing request" exception=(e, catch_backtrace())
+        error_response = json(Dict("error" => "Error: $(sprint(showerror, e))"), status=400)
+        return (nothing, nothing, error_response)
+    end
+end
+
+"""
+Build detailed failure response from FailureInfo
+"""
+function build_failure_response(failure_info)
+    if failure_info === nothing
+        return Dict(
+            "error" => "No feasible schedule found",
+            "msg" => "Try adjusting constraints or adding more workers."
+        )
+    end
+    
+    msg = "Schedule is not feasible.\n\n"
+    msg *= "Capacity Analysis:\n"
+    msg *= "- Total slots needed: $(failure_info.capacity_analysis["total_slots"])\n"
+    msg *= "- Available worker-days: $(failure_info.capacity_analysis["available_worker_days"])\n"
+    msg *= "- Utilization: $(failure_info.capacity_analysis["utilization_percent"])%\n"
+    
+    if !isempty(failure_info.capacity_analysis["daily_issues"])
+        msg *= "\nDaily Capacity Issues:\n"
+        for issue in failure_info.capacity_analysis["daily_issues"]
+            msg *= "- $issue\n"
+        end
+    end
+    
+    msg *= "\nFailed at relaxation level $(failure_info.level)\n"
+    msg *= "Constraint requirements that couldn't be satisfied:\n"
+    for detail in failure_info.constraint_details[1:min(5, length(failure_info.constraint_details))]
+        msg *= "- $detail\n"
+    end
+    
+    return Dict(
+        "error" => msg,
+        "msg" => msg,
+        "details" => Dict(
+            "capacity" => failure_info.capacity_analysis,
+            "failed_level" => failure_info.level,
+            "constraints" => failure_info.constraint_details
+        )
+    )
+end
+
+"""
 Convert schedule array to display format (Tasks × Days)
 """
 function schedule_to_display(schedule, scheduler::AutransScheduler)
@@ -190,178 +279,58 @@ end
 
 # POST /sat - Check if a schedule is feasible (SAT check)
 @post "/sat" function(req::HTTP.Request)
-    try
-        # Parse JSON request
-        body = JSON3.read(String(req.body))
-        
-        # Extract parameters
-        workers = parse_workers(body.workers)
-        tasks = parse_tasks(body.tasks)
-        nb_days = body.nb_days
-        balance_daysoff = get(body, :balance_daysoff, false)
-        
-        # Get constraint lists from request (with defaults)
-        hard_names = get(body, :hard_constraints, ["TaskCoverage", "NoConsecutiveTasks", "DaysOff"])
-        soft_names = get(body, :soft_constraints, ["OverallEquity", "DailyEquity", "TaskDiversity"])
-        
-        # Build constraint objects
-        hard_constraints, soft_constraints = build_constraints(hard_names, soft_names)
-        
-        # Determine equity strategy
-        equity_strategy = balance_daysoff ? :proportional : :absolute
-        
-        # Create scheduler
-        scheduler = AutransScheduler(
-            workers,
-            tasks,
-            nb_days,
-            equity_strategy=equity_strategy,
-            max_solve_time=60.0,
-            verbose=false,
-            hard_constraints=hard_constraints,
-            soft_constraints=soft_constraints
-        )
-        
-        # Try to solve
-        result, failure_info = solve(scheduler)
-        
-        if result !== nothing
-            return json(Dict(
-                "sat" => true,
-                "msg" => "Schedule is feasible"
-            ))
-        else
-            # Build detailed failure message
-            if failure_info !== nothing
-                msg = "Schedule is not feasible.\n\n"
-                msg *= "Capacity Analysis:\n"
-                msg *= "- Total slots needed: $(failure_info.capacity_analysis["total_slots"])\n"
-                msg *= "- Available worker-days: $(failure_info.capacity_analysis["available_worker_days"])\n"
-                msg *= "- Utilization: $(failure_info.capacity_analysis["utilization_percent"])%\n"
-                
-                if !isempty(failure_info.capacity_analysis["daily_issues"])
-                    msg *= "\nDaily Capacity Issues:\n"
-                    for issue in failure_info.capacity_analysis["daily_issues"]
-                        msg *= "- $issue\n"
-                    end
-                end
-                
-                msg *= "\nFailed at relaxation level $(failure_info.level)\n"
-                msg *= "Constraint requirements that couldn't be satisfied:\n"
-                for detail in failure_info.constraint_details[1:min(5, length(failure_info.constraint_details))]
-                    msg *= "- $detail\n"
-                end
-                
-                return json(Dict(
-                    "sat" => false,
-                    "msg" => msg,
-                    "details" => Dict(
-                        "capacity" => failure_info.capacity_analysis,
-                        "failed_level" => failure_info.level,
-                        "constraints" => failure_info.constraint_details
-                    )
-                ))
-            else
-                return json(Dict(
-                    "sat" => false,
-                    "msg" => "No feasible schedule found. Try adjusting constraints or adding more workers."
-                ))
-            end
-        end
-        
-    catch e
-        @error "Error in /sat endpoint" exception=(e, catch_backtrace())
+    # Parse request and create scheduler
+    scheduler, params, error_response = parse_request_and_create_scheduler(req, max_solve_time=60.0)
+    if error_response !== nothing
+        return error_response
+    end
+    
+    # Try to solve
+    result, failure_info = solve(scheduler)
+    
+    if result !== nothing
+        return json(Dict(
+            "sat" => true,
+            "msg" => "Schedule is feasible"
+        ))
+    else
+        # Build failure response
+        failure_dict = build_failure_response(failure_info)
         return json(Dict(
             "sat" => false,
-            "msg" => "Error: $(sprint(showerror, e))"
-        ), status=500)
+            "msg" => failure_dict["msg"],
+            "details" => get(failure_dict, "details", nothing)
+        ))
     end
 end
 
 # POST /schedule - Generate a complete schedule with all views
 @post "/schedule" function(req::HTTP.Request)
-    try
-        # Parse JSON request
-        body = JSON3.read(String(req.body))
-        
-        # Extract parameters
-        workers = parse_workers(body.workers)
-        tasks = parse_tasks(body.tasks)
-        nb_days = body.nb_days
-        balance_daysoff = get(body, :balance_daysoff, false)
-        
-        # Get constraint lists from request (with defaults)
-        hard_names = get(body, :hard_constraints, ["TaskCoverage", "NoConsecutiveTasks", "DaysOff"])
-        soft_names = get(body, :soft_constraints, ["OverallEquity", "DailyEquity", "TaskDiversity"])
-        
-        # Build constraint objects
-        hard_constraints, soft_constraints = build_constraints(hard_names, soft_names)
-        
-        # Determine equity strategy
-        equity_strategy = balance_daysoff ? :proportional : :absolute
-        
-        # Create scheduler
-        scheduler = AutransScheduler(
-            workers,
-            tasks,
-            nb_days,
-            equity_strategy=equity_strategy,
-            max_solve_time=300.0,
-            verbose=false,
-            hard_constraints=hard_constraints,
-            soft_constraints=soft_constraints
-        )
-        
-        # Solve
-        result, failure_info = solve(scheduler)
-        
-        if result === nothing
-            # Build detailed error message
-            if failure_info !== nothing
-                error_msg = "Schedule is not feasible.\n\n"
-                error_msg *= "Capacity: $(failure_info.capacity_analysis["total_slots"]) slots needed, "
-                error_msg *= "$(failure_info.capacity_analysis["available_worker_days"]) worker-days available "
-                error_msg *= "($(failure_info.capacity_analysis["utilization_percent"])% utilization)\n\n"
-                
-                if !isempty(failure_info.capacity_analysis["daily_issues"])
-                    error_msg *= "Daily issues:\n"
-                    for issue in failure_info.capacity_analysis["daily_issues"]
-                        error_msg *= "- $issue\n"
-                    end
-                end
-                
-                return json(Dict(
-                    "error" => error_msg,
-                    "details" => Dict(
-                        "capacity" => failure_info.capacity_analysis,
-                        "failed_level" => failure_info.level,
-                        "constraints" => failure_info.constraint_details
-                    )
-                ), status=400)
-            else
-                return json(Dict(
-                    "error" => "No feasible schedule found"
-                ), status=400)
-            end
-        end
-        
-        # Generate all three views
-        display_data = schedule_to_display(result, scheduler)
-        time_data = schedule_to_time_agg(result, scheduler)
-        jobs_data = schedule_to_jobs_agg(result, scheduler)
-        
-        return json(Dict(
-            "display" => display_data,
-            "time" => time_data,
-            "jobs" => jobs_data
-        ))
-        
-    catch e
-        @error "Error in /schedule endpoint" exception=(e, catch_backtrace())
-        return json(Dict(
-            "error" => "Error: $(sprint(showerror, e))"
-        ), status=500)
+    # Parse request and create scheduler
+    scheduler, params, error_response = parse_request_and_create_scheduler(req)
+    if error_response !== nothing
+        return error_response
     end
+    
+    # Solve
+    result, failure_info = solve(scheduler)
+    
+    if result === nothing
+        # Build failure response
+        failure_dict = build_failure_response(failure_info)
+        return json(failure_dict, status=400)
+    end
+    
+    # Generate all three views
+    display_data = schedule_to_display(result, scheduler)
+    time_data = schedule_to_time_agg(result, scheduler)
+    jobs_data = schedule_to_jobs_agg(result, scheduler)
+    
+    return json(Dict(
+        "display" => display_data,
+        "time" => time_data,
+        "jobs" => jobs_data
+    ))
 end
 
 """
@@ -457,138 +426,64 @@ end
 
 # POST /export/ics - Export schedule as iCalendar
 @post "/export/ics" function(req::HTTP.Request)
-    try
-        # Parse JSON request
-        body = JSON3.read(String(req.body))
-        
-        # Extract parameters
-        workers = parse_workers(body.workers)
-        tasks = parse_tasks(body.tasks)
-        nb_days = body.nb_days
-        balance_daysoff = get(body, :balance_daysoff, false)
-        start_date = get(body, :start_date, string(today()))
-        trip_name = get(body, :trip_name, "Schedule")
-        
-        # Get constraint lists from request (with defaults)
-        hard_names = get(body, :hard_constraints, ["TaskCoverage", "NoConsecutiveTasks", "DaysOff"])
-        soft_names = get(body, :soft_constraints, ["OverallEquity", "DailyEquity", "TaskDiversity"])
-        
-        # Build constraint objects
-        hard_constraints, soft_constraints = build_constraints(hard_names, soft_names)
-        
-        # Determine equity strategy
-        equity_strategy = balance_daysoff ? :proportional : :absolute
-        
-        # Create scheduler
-        scheduler = AutransScheduler(
-            workers,
-            tasks,
-            nb_days,
-            equity_strategy=equity_strategy,
-            max_solve_time=300.0,
-            verbose=false,
-            hard_constraints=hard_constraints,
-            soft_constraints=soft_constraints
-        )
-        
-        # Solve
-        result, failure_info = solve(scheduler)
-        
-        if result === nothing
-            return json(Dict(
-                "error" => "Cannot export: schedule is not feasible"
-            ), status=400)
-        end
-        
-        # Generate iCalendar
-        ics_content = generate_icalendar(result, scheduler, start_date)
-        
-        # Generate filename: Schedule-{trip_name}-{start_date}-{duration}days.ics
-        safe_trip_name = replace(trip_name, r"[^a-zA-Z0-9_-]" => "_")
-        filename = "Schedule-$(safe_trip_name)-$(start_date)-$(nb_days)days.ics"
-        
-        # Return as downloadable file
-        return HTTP.Response(
-            200,
-            ["Content-Type" => "text/calendar; charset=utf-8",
-             "Content-Disposition" => "attachment; filename=\"$(filename)\""],
-            body=ics_content
-        )
-        
-    catch e
-        @error "Error in /export/ics endpoint" exception=(e, catch_backtrace())
-        return json(Dict(
-            "error" => "Error: $(sprint(showerror, e))"
-        ), status=500)
+    # Parse request and create scheduler
+    scheduler, params, error_response = parse_request_and_create_scheduler(req)
+    if error_response !== nothing
+        return error_response
     end
+    
+    # Solve
+    result, failure_info = solve(scheduler)
+    
+    if result === nothing
+        return json(Dict("error" => "Cannot export: schedule is not feasible"), status=400)
+    end
+    
+    # Generate iCalendar
+    ics_content = generate_icalendar(result, scheduler, params["start_date"])
+    
+    # Generate filename
+    safe_trip_name = replace(params["trip_name"], r"[^a-zA-Z0-9_-]" => "_")
+    filename = "Schedule-$(safe_trip_name)-$(params["start_date"])-$(params["nb_days"])days.ics"
+    
+    # Return as downloadable file
+    return HTTP.Response(
+        200,
+        ["Content-Type" => "text/calendar; charset=utf-8",
+         "Content-Disposition" => "attachment; filename=\"$(filename)\""],
+        body=ics_content
+    )
 end
 
 # POST /export/csv - Export schedule as CSV
 @post "/export/csv" function(req::HTTP.Request)
-    try
-        # Parse JSON request
-        body = JSON3.read(String(req.body))
-        
-        # Extract parameters
-        workers = parse_workers(body.workers)
-        tasks = parse_tasks(body.tasks)
-        nb_days = body.nb_days
-        balance_daysoff = get(body, :balance_daysoff, false)
-        start_date = get(body, :start_date, string(today()))
-        trip_name = get(body, :trip_name, "Schedule")
-        
-        # Get constraint lists from request (with defaults)
-        hard_names = get(body, :hard_constraints, ["TaskCoverage", "NoConsecutiveTasks", "DaysOff"])
-        soft_names = get(body, :soft_constraints, ["OverallEquity", "DailyEquity", "TaskDiversity"])
-        
-        # Build constraint objects
-        hard_constraints, soft_constraints = build_constraints(hard_names, soft_names)
-        
-        # Determine equity strategy
-        equity_strategy = balance_daysoff ? :proportional : :absolute
-        
-        # Create scheduler
-        scheduler = AutransScheduler(
-            workers,
-            tasks,
-            nb_days,
-            equity_strategy=equity_strategy,
-            max_solve_time=300.0,
-            verbose=false,
-            hard_constraints=hard_constraints,
-            soft_constraints=soft_constraints
-        )
-        
-        # Solve
-        result, failure_info = solve(scheduler)
-        
-        if result === nothing
-            return json(Dict(
-                "error" => "Cannot export: schedule is not feasible"
-            ), status=400)
-        end
-        
-        # Generate CSV
-        csv_content = generate_csv(result, scheduler, start_date)
-        
-        # Generate filename: Schedule-{trip_name}-{start_date}-{duration}days.csv
-        safe_trip_name = replace(trip_name, r"[^a-zA-Z0-9_-]" => "_")
-        filename = "Schedule-$(safe_trip_name)-$(start_date)-$(nb_days)days.csv"
-        
-        # Return as downloadable file
-        return HTTP.Response(
-            200,
-            ["Content-Type" => "text/csv; charset=utf-8",
-             "Content-Disposition" => "attachment; filename=\"$(filename)\""],
-            body=csv_content
-        )
-        
-    catch e
-        @error "Error in /export/csv endpoint" exception=(e, catch_backtrace())
-        return json(Dict(
-            "error" => "Error: $(sprint(showerror, e))"
-        ), status=500)
+    # Parse request and create scheduler
+    scheduler, params, error_response = parse_request_and_create_scheduler(req)
+    if error_response !== nothing
+        return error_response
     end
+    
+    # Solve
+    result, failure_info = solve(scheduler)
+    
+    if result === nothing
+        return json(Dict("error" => "Cannot export: schedule is not feasible"), status=400)
+    end
+    
+    # Generate CSV
+    csv_content = generate_csv(result, scheduler, params["start_date"])
+    
+    # Generate filename
+    safe_trip_name = replace(params["trip_name"], r"[^a-zA-Z0-9_-]" => "_")
+    filename = "Schedule-$(safe_trip_name)-$(params["start_date"])-$(params["nb_days"])days.csv"
+    
+    # Return as downloadable file
+    return HTTP.Response(
+        200,
+        ["Content-Type" => "text/csv; charset=utf-8",
+         "Content-Disposition" => "attachment; filename=\"$(filename)\""],
+        body=csv_content
+    )
 end
 
 # GET / - Health check endpoint
