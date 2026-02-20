@@ -152,7 +152,7 @@ def display_chore(chore_name, nb_worker, color, i, with_range=False):
         chore_start, chore_end = 0, len(selected_days)-1
     return chore_name_i, nb_worker_i, color_i, chore_start, chore_end
 
-def display_worker(worker_name, worker_days_off, i):
+def display_worker(worker_name, worker_days_off, i, task_names):
     if st.session_state['with_days_off']:
         worker_row_i = st.columns([2, 3, 1], vertical_alignment="bottom")
         
@@ -170,8 +170,63 @@ def display_worker(worker_name, worker_days_off, i):
         worker_row_i[1].button("", icon=":material/close:", type="secondary", 
                     key=f"del_worker_{i}", use_container_width=True,
                     on_click=del_worker, args=[i])
+    
+    # Show task preferences if enabled
+    worker_preferences_i = []
+    if st.session_state.get('show_preferences', False) and task_names:
+        # Initialize preference list if not exists
+        if f"worker_pref_list_{i}" not in st.session_state:
+            st.session_state[f"worker_pref_list_{i}"] = []
+        
+        pref_list = st.session_state[f"worker_pref_list_{i}"]
+        
+        # Get available tasks (not yet in preference list)
+        available_tasks = [t for t in task_names if t not in pref_list]
+        
+        # Dropdown to add tasks
+        if available_tasks:
+            add_col1, add_col2 = st.columns([3, 1])
+            selected_to_add = add_col1.selectbox(
+                "Add task preference",
+                options=["Select task..."] + available_tasks,
+                key=f"worker_{i}_add_pref",
+                label_visibility="collapsed"
+            )
+            
+            if add_col2.button("Add", key=f"worker_{i}_add_btn", use_container_width=True):
+                if selected_to_add != "Select task...":
+                    pref_list.append(selected_to_add)
+                    st.session_state[f"worker_pref_list_{i}"] = pref_list
+                    st.rerun()
+        
+        # Display ranked preferences with up arrow and remove button
+        if pref_list:
+            st.markdown("**Ranked Preferences:**")
+            for rank, task in enumerate(pref_list):
+                pref_row = st.columns([1, 4, 1, 1], vertical_alignment="center")
+                pref_row[0].markdown(f"**{rank + 1}.**")
+                pref_row[1].markdown(task)
+                
+                # Up arrow (disabled for first item)
+                if rank > 0:
+                    if pref_row[2].button("↑", key=f"worker_{i}_up_{rank}", use_container_width=True):
+                        # Swap with previous item
+                        pref_list[rank], pref_list[rank-1] = pref_list[rank-1], pref_list[rank]
+                        st.session_state[f"worker_pref_list_{i}"] = pref_list
+                        st.rerun()
+                else:
+                    pref_row[2].empty()
+                
+                # Remove button
+                if pref_row[3].button("×", key=f"worker_{i}_remove_{rank}", use_container_width=True):
+                    pref_list.pop(rank)
+                    st.session_state[f"worker_pref_list_{i}"] = pref_list
+                    st.rerun()
+        
+        # Convert to backend format (1-based task indices)
+        worker_preferences_i = [task_names.index(task) + 1 for task in pref_list]
 
-    return worker_name_i, worker_days_off_i
+    return worker_name_i, worker_days_off_i, worker_preferences_i
 
 def del_state_list(key, error_msg, i):
     print("del", key, i, len(st.session_state[key]))
@@ -213,36 +268,36 @@ def del_soft_constraint(i):
     st.session_state['soft_constraints'] = [c for (j, c) in enumerate(st.session_state['soft_constraints']) if j != i]
 
 def add_hard_constraint():
-    if len(st.session_state['hard_constraints']) >= 6:
-        setting_error("All constraints are already added")
-        return
-    
-    # Find first available constraint
+    # All available constraints
     all_constraints = ["Task Coverage", "No Consecutive Tasks", "Days Off", 
-                      "Overall Equity", "Daily Equity", "Task Diversity"]
+                      "Overall Equity", "Daily Equity", "Task Diversity", "Worker Preference"]
+    
+    # Check if all constraints are already used
     used = st.session_state['hard_constraints'] + st.session_state['soft_constraints']
     available = [c for c in all_constraints if c not in used]
     
-    if available:
-        st.session_state['hard_constraints'].append(available[0])
-    else:
+    if not available:
         setting_error("All constraints are already added")
+        return
+    
+    # Add first available constraint
+    st.session_state['hard_constraints'].append(available[0])
 
 def add_soft_constraint():
-    if len(st.session_state['soft_constraints']) >= 6:
-        setting_error("All constraints are already added")
-        return
-    
-    # Find first available constraint
+    # All available constraints
     all_constraints = ["Task Coverage", "No Consecutive Tasks", "Days Off",
-                      "Overall Equity", "Daily Equity", "Task Diversity"]
+                      "Overall Equity", "Daily Equity", "Task Diversity", "Worker Preference"]
+    
+    # Check if all constraints are already used
     used = st.session_state['hard_constraints'] + st.session_state['soft_constraints']
     available = [c for c in all_constraints if c not in used]
     
-    if available:
-        st.session_state['soft_constraints'].append(available[0])
-    else:
+    if not available:
         setting_error("All constraints are already added")
+        return
+    
+    # Add first available constraint
+    st.session_state['soft_constraints'].append(available[0])
 
 def move_soft_constraint_up(i):
     if i > 0:
@@ -297,8 +352,17 @@ def display_chores_section():
 
 
 def on_save_state():
-    only_keys = [k for k in list(st.session_state.keys()) if k not in ["load_state", "save_state", "submit"]]
-    only_keys = [k for k in only_keys if ("del" not in k) and ("btn" not in k)]
+    # Exclude runtime results and non-serializable data
+    exclude_keys = [
+        "load_state", "save_state", "submit",
+        "schedule_df", "schedule_colors",  # DataFrame and colors (runtime results)
+        "grid_data", "time_data", "jobs_data",  # Schedule results
+        "export_workers", "export_tasks", "export_balance",  # Export data
+        "show_schedule"  # Runtime flag
+    ]
+    
+    only_keys = [k for k in list(st.session_state.keys()) if k not in exclude_keys]
+    only_keys = [k for k in only_keys if ("del" not in k) and ("btn" not in k) and ("add" not in k)]
 
     serialized_state = {}
     for k in only_keys:
@@ -344,17 +408,28 @@ def on_load_state(state):
 def display_worker_section():
     if 'with_days_off' not in st.session_state:
         st.session_state['with_days_off'] = True
+    
+    # Show task preferences toggle
+    if 'show_preferences' not in st.session_state:
+        st.session_state['show_preferences'] = False
+    
+    st.session_state['show_preferences'] = st.toggle("Show task preferences", 
+                                                      value=st.session_state['show_preferences'],
+                                                      help="Allow workers to rank tasks by preference")
+    
+    # Get task names for preferences
+    task_names = st.session_state.get('chore_names', [])
 
     if "workers" not in st.session_state:
         st.session_state["workers"] = []
         default_worker_names = ["Alex", "Benjamin", "Caroline", "Diane", "Esteban", "Frank"]
 
         for i, name in enumerate(default_worker_names):
-            worker_name_i, worker_days_off_i = display_worker(name, [], i)
+            worker_name_i, worker_days_off_i, worker_prefs_i = display_worker(name, [], i, task_names)
             st.session_state["workers"].append((worker_name_i, worker_days_off_i))
     else:
         for (i, (worker_name_i, worker_days_off_i)) in enumerate(st.session_state["workers"]):
-            worker_name_i, worker_days_off_i = display_worker(worker_name_i, worker_days_off_i, i)
+            worker_name_i, worker_days_off_i, worker_prefs_i = display_worker(worker_name_i, worker_days_off_i, i, task_names)
 
     row_add = st.columns([2, 3, 1])
     st.markdown('<div class="action-button">', unsafe_allow_html=True)
@@ -443,7 +518,8 @@ with settings:
                 "Days Off": "Workers cannot work on their days off",
                 "Overall Equity": "Fair distribution of total workload",
                 "Daily Equity": "Similar amount of work per day",
-                "Task Diversity": "Everyone participates in each task"
+                "Task Diversity": "Everyone participates in each task",
+                "Worker Preference": "Respect worker task preferences (requires preferences enabled)"
             }
             
             st.markdown("#### Hard Constraints")
@@ -564,6 +640,8 @@ if submit:
         all_tasks.append((chore_name, nb_people, difficulty, start, end))
 
     workers = []
+    task_names = st.session_state.get('chore_names', [])
+    
     for i in range(len(st.session_state["workers"])):
         w_name = st.session_state[f"worker_name_{i}"]
         if f"worker_days_off_{i}" in st.session_state:
@@ -571,7 +649,18 @@ if submit:
             w_days_off_idx = [selected_days.index(d)+1 for d in w_days_off]
         else:
             w_days_off_idx = []
-        workers.append((w_name, w_days_off_idx))
+        
+        # Collect task preferences if enabled
+        w_preferences = []
+        if st.session_state.get('show_preferences', False) and task_names:
+            for rank in range(len(task_names)):
+                if f"worker_{i}_pref_rank_{rank}" in st.session_state:
+                    task_name = st.session_state[f"worker_{i}_pref_rank_{rank}"]
+                    task_idx = task_names.index(task_name) + 1  # 1-based index
+                    w_preferences.append(task_idx)
+        
+        # Add worker with preferences (empty list if not using preferences)
+        workers.append((w_name, w_days_off_idx, w_preferences))
 
     # Build constraint name lists from UI selections
     # Map display names to backend names
@@ -581,7 +670,8 @@ if submit:
         "Days Off": "DaysOff",
         "Overall Equity": "OverallEquity",
         "Daily Equity": "DailyEquity",
-        "Task Diversity": "TaskDiversity"
+        "Task Diversity": "TaskDiversity",
+        "Worker Preference": "WorkerPreference"
     }
     
     hard_constraints = [constraint_name_map[c] for c in st.session_state.get('hard_constraints', [])]
@@ -930,6 +1020,20 @@ with tables:
             - They won't be assigned tasks on those days
             - Affects workload distribution (see Balance below)
             
+            **Task Preferences** (Optional):
+            - When enabled, workers can rank tasks by preference
+            - **How to use:**
+              1. Select a task from the dropdown to add it to preferences
+              2. Click "Add" to add it to the ranked list
+              3. Use ↑ arrow to move tasks up (swap with item above)
+              4. Click × to remove a task from preferences
+              5. Leave empty if worker has no preferences
+            - **How it affects scheduling:**
+              - Ranked tasks: Worker is more likely to get these assignments
+              - Unranked tasks: Worker is less likely to get these assignments
+              - The scheduler tries to respect preferences while maintaining fairness
+            - **Example:** If Alex ranks [Cleaning, Cooking], they'll get more Cleaning/Cooking and less Shopping
+            
             ---
             
             ### ⚖️ Balance Settings - Why It Matters
@@ -1088,166 +1192,3 @@ with tables:
             - Use "Load State" to restore a saved configuration
             """)
     
-    with tabs[1]:
-        schedule_placeholder = st.empty()
-        if 'schedule_df' in st.session_state:
-            make_schedule(schedule_placeholder, st.session_state['schedule_df'], st.session_state['schedule_colors'])
-        else:
-            schedule_placeholder.markdown("Your schedule is here")
-    with tabs[2]:
-        schedule_grid = make_table("Schedule", ["Tasks"] + selected_days)
-        if 'grid_data' in st.session_state:
-            set_df(schedule_grid, st.session_state['grid_data'])
-    with tabs[3]:
-        schedule_grid_audit = make_table("Schedule", ["Tasks"] + selected_days)
-        if 'grid_data' in st.session_state:
-            set_df(schedule_grid_audit, st.session_state['grid_data'])
-        task_agg = make_table("Affectation per day", ["Days"] + workers)
-        if 'time_data' in st.session_state:
-            set_df(task_agg, st.session_state['time_data'])
-        task_per_day_agg = make_table("Affectation per task", ["Tasks"] + workers)
-        if 'jobs_data' in st.session_state:
-            set_df(task_per_day_agg, st.session_state['jobs_data'])
-        
-        # Add legend
-        st.markdown("---")
-        st.markdown("### 📖 Legend")
-        st.markdown("""
-        **Understanding the Audit Tables:**
-        
-        - **Schedule**: Shows which workers are assigned to each task on each day
-        - **Affectation per day**: Shows how many tasks each worker does per day (and total)
-        - **Affectation per task**: Shows how many times each worker does each task (and total)
-        
-        **Notation:**
-        - **\*** (asterisk) = Worker had a day off on that day/task period
-        - Numbers with * indicate work done despite having days off in that period
-        - TOTAL row/column shows the sum across all days/tasks
-        """)
-    with tabs[4]:
-        if 'grid_data' in st.session_state:
-            st.markdown("""
-            <div style="background-color: rgb(16, 185, 129); padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
-                <h2 style="color: white; margin: 0;">📥 Export Your Schedule</h2>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            st.markdown("### Choose your export format:")
-            st.markdown("")
-            
-            col1, col2 = st.columns(2)
-            
-            # Prepare payload with start_date and trip_name
-            export_payload = {
-                "workers": st.session_state.get('export_workers', []),
-                "tasks": st.session_state.get('export_tasks', []),
-                "nb_days": st.session_state.get('nb_days', 7),
-                "balance_daysoff": st.session_state.get('export_balance', False),
-                "start_date": st.session_state["start_date"].isoformat(),
-                "trip_name": st.session_state.get('trip_name', 'My_Trip')
-            }
-            
-            with col1:
-                    if st.button("📅 Download iCalendar (.ics)", type="primary", use_container_width=True):
-                        try:
-                            res = requests.post("http://127.0.0.1:8080/export/ics", json=export_payload)
-                            if res.status_code == 200:
-                                # Generate filename from trip details
-                                trip_name = st.session_state.get('trip_name', 'My_Trip').replace(' ', '_')
-                                start_date = st.session_state["start_date"].isoformat()
-                                nb_days = st.session_state.get('nb_days', 7)
-                                filename = f"Schedule-{trip_name}-{start_date}-{nb_days}days.ics"
-                                
-                                st.download_button(
-                                    label=f"💾 Save {filename}",
-                                    data=res.content,
-                                    file_name=filename,
-                                    mime="text/calendar",
-                                    use_container_width=True
-                                )
-                                st.success("✅ iCalendar file ready for download!")
-                            else:
-                                st.error(f"❌ Export failed: {res.json().get('error', 'Unknown error')}")
-                        except Exception as e:
-                            st.error(f"❌ Error: {str(e)}")
-                    
-                    st.markdown("")
-                    st.markdown("**Compatible with:**")
-                    st.markdown("- Microsoft Outlook")
-                    st.markdown("- Google Calendar")
-                    st.markdown("- Apple Calendar")
-                    st.markdown("- Any calendar app")
-            
-            with col2:
-                    if st.button("📊 Download CSV", type="primary", use_container_width=True):
-                        try:
-                            res = requests.post("http://127.0.0.1:8080/export/csv", json=export_payload)
-                            if res.status_code == 200:
-                                # Generate filename from trip details
-                                trip_name = st.session_state.get('trip_name', 'My_Trip').replace(' ', '_')
-                                start_date = st.session_state["start_date"].isoformat()
-                                nb_days = st.session_state.get('nb_days', 7)
-                                filename = f"Schedule-{trip_name}-{start_date}-{nb_days}days.csv"
-                                
-                                st.download_button(
-                                    label=f"💾 Save {filename}",
-                                    data=res.content,
-                                    file_name=filename,
-                                    mime="text/csv",
-                                    use_container_width=True
-                                )
-                                st.success("✅ CSV file ready for download!")
-                            else:
-                                st.error(f"❌ Export failed: {res.json().get('error', 'Unknown error')}")
-                        except Exception as e:
-                            st.error(f"❌ Error: {str(e)}")
-                    
-                    st.markdown("")
-                    st.markdown("**Compatible with:**")
-                    st.markdown("- Microsoft Excel")
-                    st.markdown("- Google Sheets")
-                    st.markdown("- LibreOffice Calc")
-                    st.markdown("- Any spreadsheet app")
-            
-            st.markdown("---")
-            st.markdown("### 📖 Import Instructions")
-            
-            with st.expander("📅 How to import iCalendar (.ics) files"):
-                    st.markdown("""
-                    **Microsoft Outlook:**
-                    1. Open Outlook
-                    2. Go to File → Open & Export → Import/Export
-                    3. Select "Import an iCalendar (.ics) file"
-                    4. Browse to the downloaded file
-                    
-                    **Google Calendar:**
-                    1. Open Google Calendar
-                    2. Click the gear icon → Settings
-                    3. Select "Import & Export" from the left menu
-                    4. Click "Select file from your computer"
-                    5. Choose the downloaded .ics file
-                    
-                    **Apple Calendar:**
-                    1. Open Calendar app
-                    2. Go to File → Import
-                    3. Select the downloaded .ics file
-                    """)
-            
-            with st.expander("📊 How to open CSV files"):
-                    st.markdown("""
-                    **Microsoft Excel:**
-                    1. Open Excel
-                    2. Go to File → Open
-                    3. Select the downloaded .csv file
-                    
-                    **Google Sheets:**
-                    1. Open Google Sheets
-                    2. Go to File → Import
-                    3. Upload the .csv file
-                    
-                    **Double-click:**
-                    - Most systems will open CSV files in your default spreadsheet app
-                    """)
-        else:
-            st.info("📋 Generate a schedule first to enable export options")
-        

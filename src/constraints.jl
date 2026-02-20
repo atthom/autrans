@@ -63,7 +63,9 @@ Apply a hard constraint (no relaxation)
 """
 function apply!(model, assign, scheduler::AutransScheduler, 
                 c::Constraint{Val{:HARD}}, N::Int, D::Int, T::Int)
-    apply_constraint!(model, assign, scheduler, c.constraint, N, D, T)
+    result = apply_constraint!(model, assign, scheduler, c.constraint, N, D, T)
+    # Only return if it's a valid objective expression (not constraints)
+    return result isa Union{JuMP.AffExpr, JuMP.QuadExpr, Number} ? result : nothing
 end
 
 """
@@ -71,7 +73,9 @@ Apply a soft constraint (with relaxation)
 """
 function apply!(model, assign, scheduler::AutransScheduler, 
                 c::Constraint{Val{:SOFT}}, N::Int, D::Int, T::Int, relaxation::Int)
-    apply_constraint!(model, assign, scheduler, c.constraint, N, D, T, relaxation)
+    result = apply_constraint!(model, assign, scheduler, c.constraint, N, D, T, relaxation)
+    # Only return if it's a valid objective expression (not constraints)
+    return result isa Union{JuMP.AffExpr, JuMP.QuadExpr, Number} ? result : nothing
 end
 
 # ============================================================================
@@ -343,4 +347,72 @@ function apply_constraint!(model, assign, scheduler::AutransScheduler,
             @constraint(model, sum(assign[w, d, t] for d in 1:D) <= upper)
         end
     end
+end
+
+# ============================================================================
+# Worker Preference Constraint (HARD or SOFT)
+# ============================================================================
+
+"""
+Build preference penalty matrix for workers.
+Returns a matrix where penalty[w, t] is the penalty for assigning worker w to task t.
+Workers with no preferences get 0 penalty for all tasks.
+"""
+function build_preference_penalties(scheduler::AutransScheduler, N::Int, T::Int)
+    penalties = zeros(Int, N, T)
+    
+    for (w, worker) in enumerate(scheduler.workers)
+        if !isempty(worker.task_preferences)
+            # Build reverse mapping: task_idx -> preference_rank
+            for (rank, task_idx) in enumerate(worker.task_preferences)
+                if 1 <= task_idx <= T
+                    # Penalty increases with rank: rank 1 = 0, rank 2 = 1, rank 3 = 2, etc.
+                    penalties[w, task_idx] = rank - 1
+                end
+            end
+            
+            # Tasks not in preferences get highest penalty
+            max_penalty = length(worker.task_preferences)
+            for t in 1:T
+                if penalties[w, t] == 0 && t ∉ worker.task_preferences
+                    penalties[w, t] = max_penalty
+                end
+            end
+        end
+    end
+    
+    return penalties
+end
+
+"""
+As HARD: Strong preference enforcement (high penalty multiplier)
+Returns the penalty expression to be added to the objective function.
+"""
+function apply_constraint!(model, assign, scheduler::AutransScheduler,
+                          c::WorkerPreferenceConstraint, N::Int, D::Int, T::Int)
+    penalties = build_preference_penalties(scheduler, N, T)
+    
+    # High penalty multiplier for hard constraint (10x)
+    penalty_weight = 10
+    
+    # Return penalty expression: sum of (penalty * assignment) for all worker-day-task combinations
+    return penalty_weight * sum(penalties[w, t] * assign[w, d, t] 
+                               for w in 1:N, d in 1:D, t in 1:T)
+end
+
+"""
+As SOFT: Moderate preference enforcement (lower penalty, affected by relaxation)
+Returns the penalty expression to be added to the objective function.
+"""
+function apply_constraint!(model, assign, scheduler::AutransScheduler,
+                          c::WorkerPreferenceConstraint, N::Int, D::Int, T::Int, relaxation::Int)
+    penalties = build_preference_penalties(scheduler, N, T)
+    
+    # Lower penalty multiplier for soft constraint, reduced by relaxation
+    # Base weight of 2, reduced as relaxation increases
+    penalty_weight = max(0.1, 2.0 - relaxation * 0.3)
+    
+    # Return penalty expression
+    return penalty_weight * sum(penalties[w, t] * assign[w, d, t] 
+                               for w in 1:N, d in 1:D, t in 1:T)
 end

@@ -145,12 +145,20 @@ function solve(scheduler::AutransScheduler)
         # Create model
         model, assign = create_model(scheduler, N, D, T)
         
+        # Collect objective terms (for preference constraints)
+        objective_terms = []
+        
         # Apply hard constraints
         for constraint in scheduler.hard_constraints
             if scheduler.verbose
                 println("Applying HARD: $(constraint.name)")
             end
-            apply!(model, assign, scheduler, constraint, N, D, T)
+            result = apply!(model, assign, scheduler, constraint, N, D, T)
+            
+            # If constraint returns an objective term, collect it
+            if result !== nothing
+                push!(objective_terms, result)
+            end
         end
         
         # Apply soft constraints with relaxation
@@ -162,7 +170,20 @@ function solve(scheduler::AutransScheduler)
             end
             
             # Apply with relaxation (even if 0, the constraint handles it)
-            apply!(model, assign, scheduler, constraint, N, D, T, relaxation)
+            result = apply!(model, assign, scheduler, constraint, N, D, T, relaxation)
+            
+            # If constraint returns an objective term, collect it
+            if result !== nothing
+                push!(objective_terms, result)
+            end
+        end
+        
+        # Set objective function if there are any objective terms
+        if !isempty(objective_terms)
+            @objective(model, Min, sum(objective_terms))
+            if scheduler.verbose
+                println("Objective: Minimize preference penalties")
+            end
         end
         
         if scheduler.verbose

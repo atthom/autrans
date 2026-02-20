@@ -134,5 +134,7 @@ end
 end
 
 @testset "Aqua Tests" begin
-    Aqua.test_all(Autrans)
+    # Disable stale_deps check since we have dependencies for scripts/server
+    # that aren't used in the core library module
+    Aqua.test_all(Autrans, stale_deps=false)
 end

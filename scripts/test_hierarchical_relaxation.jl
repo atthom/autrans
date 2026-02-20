@@ -43,7 +43,7 @@ scheduler1 = AutransScheduler(
     verbose=true
 )
 
-result1 = solve(scheduler1)
+result1, failure_info1 = solve(scheduler1)
 
 if result1 !== nothing
     println("\n✅ SUCCESS! Schedule found")
@@ -114,7 +114,7 @@ scheduler2 = AutransScheduler(
     verbose=false
 )
 
-result2 = solve(scheduler2)
+result2, failure_info2 = solve(scheduler2)
 
 if result2 !== nothing
     println("✅ Unexpectedly found a solution (this shouldn't happen)")

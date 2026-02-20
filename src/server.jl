@@ -14,7 +14,9 @@ function parse_workers(workers_data)
         name = worker_data[1]
         # Convert JSON array to Vector{Int64}
         days_off = length(worker_data) >= 2 ? Vector{Int}(worker_data[2]) : Int[]
-        push!(workers, AutransWorker(name, days_off))
+        # Task preferences (optional, 1-indexed task indices in preference order)
+        task_preferences = length(worker_data) >= 3 ? Vector{Int}(worker_data[3]) : Int[]
+        push!(workers, AutransWorker(name, days_off, task_preferences))
     end
     return workers
 end
@@ -51,7 +53,8 @@ function build_constraints(hard_names, soft_names)
         "DaysOff" => Autrans.DaysOffConstraint(),
         "OverallEquity" => Autrans.OverallEquityConstraint(),
         "DailyEquity" => Autrans.DailyEquityConstraint(),
-        "TaskDiversity" => Autrans.TaskDiversityConstraint()
+        "TaskDiversity" => Autrans.TaskDiversityConstraint(),
+        "WorkerPreference" => Autrans.WorkerPreferenceConstraint()
     )
     
     # Build hard constraints with proper typing

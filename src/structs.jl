@@ -4,9 +4,10 @@ Represents a worker with their availability constraints
 struct AutransWorker
     name::String
     days_off::Set{Int}
+    task_preferences::Vector{Int}  # Ranked list of task indices (1-based, empty = no preference)
     
-    AutransWorker(name::String, days_off::Set{Int} = Set{Int}()) = new(name, days_off)
-    AutransWorker(name::String, days_off::Vector{Int}) = new(name, Set(days_off))
+    AutransWorker(name::String, days_off::Set{Int} = Set{Int}(), task_preferences::Vector{Int} = Int[]) = new(name, days_off, task_preferences)
+    AutransWorker(name::String, days_off::Vector{Int}, task_preferences::Vector{Int} = Int[]) = new(name, Set(days_off), task_preferences)
 end
 
 """
@@ -43,6 +44,7 @@ struct DaysOffConstraint <: AbstractConstraint end
 struct OverallEquityConstraint <: AbstractConstraint end
 struct DailyEquityConstraint <: AbstractConstraint end
 struct TaskDiversityConstraint <: AbstractConstraint end
+struct WorkerPreferenceConstraint <: AbstractConstraint end
 
 """
 Constraint wrapper with HARD/SOFT designation using Val for type parameter

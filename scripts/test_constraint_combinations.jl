@@ -9,14 +9,24 @@ using Printf
 
 # Test scenario
 function create_test_scenario()
-    workers = [AutransWorker("Worker_$i") for i in 1:8]
+    # Create workers with varied task preferences
+    workers = [
+        AutransWorker("Worker_1", Set{Int}(), [1, 2, 3, 4]),  # Prefers Task 1 most
+        AutransWorker("Worker_2", Set{Int}(), [2, 1, 4, 3]),  # Prefers Task 2 most
+        AutransWorker("Worker_3", Set{Int}(), [3, 4, 1, 2]),  # Prefers Task 3 most
+        AutransWorker("Worker_4", Set{Int}(), [4, 3, 2, 1]),  # Prefers Task 4 most
+        AutransWorker("Worker_5", Set{Int}(), [1, 3, 2, 4]),  # Mixed preferences
+        AutransWorker("Worker_6", Set{Int}(), [2, 4, 1, 3]),  # Mixed preferences
+        AutransWorker("Worker_7", Set{Int}(), [3, 1, 4, 2]),  # Mixed preferences
+        AutransWorker("Worker_8", Set{Int}(), [4, 2, 3, 1])   # Mixed preferences
+    ]
     tasks = [AutransTask("Task_$i", 2, 1:7) for i in 1:4]
     return workers, tasks, 7
 end
 
 # Generate all constraint combinations
-# All 6 constraints can be: not used, hard, or soft
-# Total: 3^6 = 729 combinations
+# All 7 constraints can be: not used, hard, or soft
+# Total: 3^7 = 2187 combinations
 function generate_combinations()
     all_constraints = [
         ("TaskCoverage", Autrans.TaskCoverageConstraint()),
@@ -24,14 +34,15 @@ function generate_combinations()
         ("DaysOff", Autrans.DaysOffConstraint()),
         ("OverallEquity", Autrans.OverallEquityConstraint()),
         ("DailyEquity", Autrans.DailyEquityConstraint()),
-        ("TaskDiversity", Autrans.TaskDiversityConstraint())
+        ("TaskDiversity", Autrans.TaskDiversityConstraint()),
+        ("WorkerPreference", Autrans.WorkerPreferenceConstraint())
     ]
     
     combinations = []
     
     # For each constraint: 0=not used, 1=hard, 2=soft
-    # 3^6 = 729 combinations
-    for i in 0:(3^6 - 1)
+    # 3^7 = 2187 combinations
+    for i in 0:(3^7 - 1)
         hard_combo = []
         soft_combo = []
         
@@ -91,7 +102,8 @@ function format_flags(hard_combo, soft_combo)
         "DaysOff" => " - ",
         "OverallEquity" => " - ",
         "DailyEquity" => " - ",
-        "TaskDiversity" => " - "
+        "TaskDiversity" => " - ",
+        "WorkerPreference" => " - "
     )
     
     for (name, _) in hard_combo
@@ -116,8 +128,8 @@ function run_test_suite()
     combinations = generate_combinations()
     
     # Table header
-    println("# | TC | NC | DO | OE | DE | TD | Result | Time(s) | Notes")
-    println("--|----|----|----|----|----|----|--------|---------|-------")
+    println("# | TC | NC | DO | OE | DE | TD | WP | Result | Time(s) | Notes")
+    println("--|----|----|----|----|----|----|-------|--------|---------|-------")
     
     results = []
     
@@ -144,7 +156,7 @@ function run_test_suite()
         end
         
         # Print row
-        @printf("%2d | %s  | %s  | %s  | %s  | %s  | %s  | %s | %7s | %s\n",
+        @printf("%2d | %s  | %s  | %s  | %s  | %s  | %s  | %s  | %s | %7s | %s\n",
                 idx,
                 all_flags["TaskCoverage"],
                 all_flags["NoConsecutiveTasks"],
@@ -152,6 +164,7 @@ function run_test_suite()
                 all_flags["OverallEquity"],
                 all_flags["DailyEquity"],
                 all_flags["TaskDiversity"],
+                all_flags["WorkerPreference"],
                 result_str,
                 time_str,
                 notes)
@@ -162,7 +175,7 @@ function run_test_suite()
     println()
     println("Legend:")
     println("TC=TaskCoverage, NC=NoConsecutiveTasks, DO=DaysOff")
-    println("OE=OverallEquity, DE=DailyEquity, TD=TaskDiversity")
+    println("OE=OverallEquity, DE=DailyEquity, TD=TaskDiversity, WP=WorkerPreference")
     println("H=Hard constraint, S=Soft constraint, -=Not used")
     println()
     
