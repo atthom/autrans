@@ -51,19 +51,12 @@ def h3_button(txt):
 def sat_schedule(txt, details=None):
     st.markdown(f"<h3 style='text-align: center; color: #dc3545;'>Schedule is not feasible</h3>", unsafe_allow_html=True)
     
-    # Show the main message
-    st.markdown("### 📊 Problem Summary")
-    st.text(txt)
-    
     # Show detailed diagnostics if available
     if details and isinstance(details, dict):
-        st.markdown("---")
-        st.markdown("### 🔍 Detailed Diagnostics")
-        
         # Capacity analysis
         if "capacity" in details:
             capacity = details["capacity"]
-            st.markdown("#### Capacity Analysis")
+            st.markdown("### 📊 Capacity Analysis")
             col1, col2, col3 = st.columns(3)
             col1.metric("Total Slots Needed", capacity.get("total_slots", "N/A"))
             col2.metric("Available Worker-Days", capacity.get("available_worker_days", "N/A"))
@@ -77,7 +70,7 @@ def sat_schedule(txt, details=None):
         
         # Constraint details
         if "constraints" in details and details["constraints"]:
-            st.markdown("#### 🔧 Constraint Requirements")
+            st.markdown("### 🔧 Constraint Requirements")
             st.markdown("*These are the requirements that couldn't be satisfied:*")
             for constraint in details["constraints"][:8]:  # Show first 8
                 st.text(f"• {constraint}")
@@ -85,6 +78,10 @@ def sat_schedule(txt, details=None):
         # Failed level
         if "failed_level" in details:
             st.info(f"Failed at relaxation level {details['failed_level']}")
+    else:
+        # Fallback: show basic message if no detailed diagnostics available
+        st.markdown("### 📊 Problem Summary")
+        st.text(txt)
     
     # OK button
     col1, col2, col3 = st.columns([1,1,1])
@@ -343,7 +340,7 @@ def add_soft_constraint():
 
 def move_soft_constraint_up(i):
     if i > 0:
-        constraints = st.session_state['soft_constraints']
+        constraints = st.session_state['soft_constraints'].copy()
         constraints[i], constraints[i-1] = constraints[i-1], constraints[i]
         st.session_state['soft_constraints'] = constraints
 
@@ -644,15 +641,20 @@ with settings:
                 
                 # Move up/down buttons
                 if i > 0:
-                    constraint_row[1].button("", icon=":material/arrow_upward:", type="secondary",
-                                           key=f"move_up_soft_{i}", use_container_width=True,
-                                           on_click=move_soft_constraint_up, args=[i])
+                    if constraint_row[1].button("", icon=":material/arrow_upward:", type="secondary",
+                                           key=f"move_up_soft_{i}", use_container_width=True):
+                        # Swap with previous item
+                        constraints = st.session_state['soft_constraints'].copy()
+                        constraints[i], constraints[i-1] = constraints[i-1], constraints[i]
+                        st.session_state['soft_constraints'] = constraints
+                        st.rerun()
                 else:
                     constraint_row[1].empty()
                 
-                constraint_row[2].button("", icon=":material/close:", type="secondary",
-                                       key=f"del_soft_constraint_{i}", use_container_width=True,
-                                       on_click=del_soft_constraint, args=[i])
+                if constraint_row[2].button("", icon=":material/close:", type="secondary",
+                                       key=f"del_soft_constraint_{i}", use_container_width=True):
+                    del_soft_constraint(i)
+                    st.rerun()
             
             # Add soft constraint button
             row_add_soft = st.columns([1, 3, 1])
