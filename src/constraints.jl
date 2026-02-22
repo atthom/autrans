@@ -150,13 +150,16 @@ end
 
 """
 OverallEquityConstraint implementation (Proportional)
-When relaxation=0: Workers work exactly proportional to available days (hard constraint, ±1 for rounding)
+When relaxation=0: Workers work exactly proportional to available days (hard constraint, ±1 difficulty point)
 When relaxation>0: Workers work proportional with tolerance (soft constraint)
-Supports workload_offset: negative = work less, positive = work more
+Supports workload_offset: negative = work less, positive = work more (in difficulty points)
+Uses difficulty-weighted workload: workload = sum(tasks × difficulty)
 """
 function apply_constraint!(model, assign, scheduler::AutransScheduler{ProportionalEquity},
                           c::OverallEquityConstraint, N::Int, D::Int, T::Int, relaxation::Int)
-    total_slots = sum(task.num_workers * length(task.day_range) for task in scheduler.tasks)
+    # Calculate total difficulty points needed
+    total_difficulty = sum(task.num_workers * length(task.day_range) * task.difficulty 
+                          for task in scheduler.tasks)
     available_worker_days = sum(D - length(worker.days_off ∩ Set(1:D)) 
                                for worker in scheduler.workers)
     
@@ -164,65 +167,79 @@ function apply_constraint!(model, assign, scheduler::AutransScheduler{Proportion
         return
     end
     
-    # Normalize workload offsets
+    # Normalize workload offsets (offsets are in difficulty points)
     normalized_offsets = normalize_offsets(scheduler.workers)
     
     for (w, worker) in enumerate(scheduler.workers)
         work_days = [d for d in 1:D if d ∉ worker.days_off]
         if !isempty(work_days)
-            # Calculate base expected workload
-            expected_float = (length(work_days) / available_worker_days) * total_slots
+            # Calculate base expected difficulty points
+            expected_float = (length(work_days) / available_worker_days) * total_difficulty
             expected = round(Int, expected_float)
             
-            # Apply normalized offset
+            # Apply normalized offset (in difficulty points)
             expected = expected + normalized_offsets[w]
             expected = max(0, expected)  # Can't be negative
             
-            lower = max(0, expected - relaxation)
-            upper = expected + relaxation + 1
+            # Tolerance: ±1 difficulty point (plus relaxation)
+            lower = max(0, expected - 1 - relaxation)
+            upper = expected + 1 + relaxation
             
-            @constraint(model, sum(assign[w, d, t] for d in 1:D, t in 1:T) >= lower)
-            @constraint(model, sum(assign[w, d, t] for d in 1:D, t in 1:T) <= upper)
+            # Constraint on difficulty-weighted workload
+            @constraint(model, sum(assign[w, d, t] * scheduler.tasks[t].difficulty 
+                                  for d in 1:D, t in 1:T) >= lower)
+            @constraint(model, sum(assign[w, d, t] * scheduler.tasks[t].difficulty 
+                                  for d in 1:D, t in 1:T) <= upper)
         end
     end
 end
 
 """
 OverallEquityConstraint implementation (Absolute)
-When relaxation=0: All workers work exactly the same amount (hard constraint, ±1 for rounding)
+When relaxation=0: All workers work exactly the same amount (hard constraint, ±1 difficulty point)
 When relaxation>0: All workers work similar amounts with tolerance (soft constraint)
-Supports workload_offset: negative = work less, positive = work more
+Supports workload_offset: negative = work less, positive = work more (in difficulty points)
+Uses difficulty-weighted workload: workload = sum(tasks × difficulty)
 """
 function apply_constraint!(model, assign, scheduler::AutransScheduler{AbsoluteEquity},
                           c::OverallEquityConstraint, N::Int, D::Int, T::Int, relaxation::Int)
-    total_slots = sum(task.num_workers * length(task.day_range) for task in scheduler.tasks)
-    expected = div(total_slots, N)
+    # Calculate total difficulty points needed
+    total_difficulty = sum(task.num_workers * length(task.day_range) * task.difficulty 
+                          for task in scheduler.tasks)
+    expected = div(total_difficulty, N)
     
-    # Normalize workload offsets
+    # Normalize workload offsets (offsets are in difficulty points)
     normalized_offsets = normalize_offsets(scheduler.workers)
     
     for (w, worker) in enumerate(scheduler.workers)
-        # Apply normalized offset
+        # Apply normalized offset (in difficulty points)
         adjusted_expected = expected + normalized_offsets[w]
         adjusted_expected = max(0, adjusted_expected)  # Can't be negative
         
-        lower = max(0, adjusted_expected - relaxation)
-        upper = adjusted_expected + relaxation + 1
+        # Tolerance: ±1 difficulty point (plus relaxation)
+        lower = max(0, adjusted_expected - 1 - relaxation)
+        upper = adjusted_expected + 1 + relaxation
         
-        @constraint(model, sum(assign[w, d, t] for d in 1:D, t in 1:T) >= lower)
-        @constraint(model, sum(assign[w, d, t] for d in 1:D, t in 1:T) <= upper)
+        # Constraint on difficulty-weighted workload
+        @constraint(model, sum(assign[w, d, t] * scheduler.tasks[t].difficulty 
+                              for d in 1:D, t in 1:T) >= lower)
+        @constraint(model, sum(assign[w, d, t] * scheduler.tasks[t].difficulty 
+                              for d in 1:D, t in 1:T) <= upper)
     end
 end
 
 
 """
 DailyEquityConstraint implementation
-When relaxation=0: Workers do similar amounts each day (hard constraint, +1 for rounding)
-When relaxation>0: Workers can do more tasks per day with tolerance (soft constraint)
+When relaxation=0: Workers do similar amounts each day (hard constraint, ±1 difficulty point)
+When relaxation>0: Workers can do more per day with tolerance (soft constraint)
+Uses difficulty-weighted workload: daily workload = sum(tasks × difficulty)
 """
 function apply_constraint!(model, assign, scheduler::AutransScheduler,
                           c::DailyEquityConstraint, N::Int, D::Int, T::Int, relaxation::Int)
-    total_slots = sum(task.num_workers * length(task.day_range) for task in scheduler.tasks)
+    # Calculate total difficulty points needed
+    total_difficulty = sum(task.num_workers * length(task.day_range) * task.difficulty 
+                          for task in scheduler.tasks)
     total_worker_days = sum(D - length(worker.days_off ∩ Set(1:D)) 
                            for worker in scheduler.workers)
     
@@ -230,13 +247,17 @@ function apply_constraint!(model, assign, scheduler::AutransScheduler,
         return
     end
     
-    avg_tasks_per_day = total_slots / total_worker_days
-    max_daily = ceil(Int, avg_tasks_per_day) + 1 + relaxation
+    # Average difficulty points per worker-day
+    avg_difficulty_per_day = total_difficulty / total_worker_days
+    # Max daily difficulty: average + 1 (tolerance) + relaxation
+    max_daily_difficulty = ceil(Int, avg_difficulty_per_day) + 1 + relaxation
     
     for (w, worker) in enumerate(scheduler.workers)
         work_days = [d for d in 1:D if d ∉ worker.days_off]
         for d in work_days
-            @constraint(model, sum(assign[w, d, t] for t in 1:T) <= max_daily)
+            # Constraint on difficulty-weighted daily workload
+            @constraint(model, sum(assign[w, d, t] * scheduler.tasks[t].difficulty 
+                                  for t in 1:T) <= max_daily_difficulty)
         end
     end
 end

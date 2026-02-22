@@ -35,16 +35,24 @@ end
 """
 Parse task data from JSON request
 Returns Vector{AutransTask}
+
+Task data format: [name, num_workers, difficulty, day_start, day_end]
+- name: String
+- num_workers: Int
+- difficulty: Int (optional, defaults to 1, must be >= 1)
+- day_start: Int
+- day_end: Int
 """
 function parse_tasks(tasks_data)
     tasks = AutransTask[]
     for task_data in tasks_data
         name = task_data[1]
         num_workers = task_data[2]
-        # task_data[3] is difficulty (not used in current implementation)
-        day_start = task_data[4]
-        day_end = task_data[5]
-        push!(tasks, AutransTask(name, num_workers, day_start:day_end))
+        # Parse difficulty (defaults to 1 if not provided or if only 4 elements)
+        difficulty = length(task_data) >= 5 ? Int(task_data[3]) : 1
+        day_start = length(task_data) >= 5 ? task_data[4] : task_data[3]
+        day_end = length(task_data) >= 5 ? task_data[5] : task_data[4]
+        push!(tasks, AutransTask(name, num_workers, day_start:day_end, difficulty))
     end
     return tasks
 end
@@ -209,6 +217,7 @@ end
 
 """
 Convert schedule to time aggregation (Days × Workers)
+Shows both task count and difficulty points: "count (difficulty pts)"
 """
 function schedule_to_time_agg(schedule, scheduler::AutransScheduler)
     N, D, T = size(schedule)
@@ -220,17 +229,22 @@ function schedule_to_time_agg(schedule, scheduler::AutransScheduler)
     push!(day_names, "TOTAL")
     push!(columns, day_names)
     
-    # Subsequent columns: tasks per day per worker
+    # Subsequent columns: tasks per day per worker (with difficulty points)
     for (w, worker) in enumerate(scheduler.workers)
         worker_col = String[]
         for d in 1:D
             count = sum(schedule[w, d, t] for t in 1:T)
+            difficulty_pts = sum(schedule[w, d, t] * scheduler.tasks[t].difficulty for t in 1:T)
             is_day_off = d in worker.days_off
-            push!(worker_col, is_day_off ? "$count*" : "$count")
+            display_str = "$count ($(difficulty_pts) pts)"
+            push!(worker_col, is_day_off ? "$display_str*" : display_str)
         end
-        total = sum(schedule[w, :, :])
+        total_count = sum(schedule[w, :, :])
+        total_difficulty = sum(schedule[w, d, t] * scheduler.tasks[t].difficulty 
+                              for d in 1:D, t in 1:T)
         has_any_day_off = !isempty(worker.days_off ∩ Set(1:D))
-        push!(worker_col, has_any_day_off ? "$total*" : "$total")
+        display_str = "$total_count ($(total_difficulty) pts)"
+        push!(worker_col, has_any_day_off ? "$display_str*" : display_str)
         push!(columns, worker_col)
         push!(colindex["names"], worker.name)
     end
@@ -238,9 +252,15 @@ function schedule_to_time_agg(schedule, scheduler::AutransScheduler)
     # Total column
     total_col = String[]
     for d in 1:D
-        push!(total_col, string(sum(schedule[:, d, :])))
+        count = sum(schedule[:, d, :])
+        difficulty_pts = sum(schedule[w, d, t] * scheduler.tasks[t].difficulty 
+                            for w in 1:N, t in 1:T)
+        push!(total_col, "$count ($(difficulty_pts) pts)")
     end
-    push!(total_col, string(sum(schedule)))
+    total_count = sum(schedule)
+    total_difficulty = sum(schedule[w, d, t] * scheduler.tasks[t].difficulty 
+                          for w in 1:N, d in 1:D, t in 1:T)
+    push!(total_col, "$total_count ($(total_difficulty) pts)")
     push!(columns, total_col)
     push!(colindex["names"], "TOTAL")
     
@@ -249,6 +269,7 @@ end
 
 """
 Convert schedule to jobs aggregation (Tasks × Workers)
+Shows both task count and difficulty points: "count (difficulty pts)"
 """
 function schedule_to_jobs_agg(schedule, scheduler::AutransScheduler)
     N, D, T = size(schedule)
@@ -261,17 +282,22 @@ function schedule_to_jobs_agg(schedule, scheduler::AutransScheduler)
     push!(task_names, "TOTAL")
     push!(columns, task_names)
     
-    # Subsequent columns: total assignments per task per worker
+    # Subsequent columns: total assignments per task per worker (with difficulty points)
     for (w, worker) in enumerate(scheduler.workers)
         worker_col = String[]
         for t in 1:T
             count = sum(schedule[w, d, t] for d in 1:D)
+            difficulty_pts = count * scheduler.tasks[t].difficulty
             has_day_off = any(d in worker.days_off for d in scheduler.tasks[t].day_range if d <= D)
-            push!(worker_col, has_day_off ? "$count*" : "$count")
+            display_str = "$count ($(difficulty_pts) pts)"
+            push!(worker_col, has_day_off ? "$display_str*" : display_str)
         end
-        total = sum(schedule[w, :, :])
+        total_count = sum(schedule[w, :, :])
+        total_difficulty = sum(schedule[w, d, t] * scheduler.tasks[t].difficulty 
+                              for d in 1:D, t in 1:T)
         has_any_day_off = !isempty(worker.days_off ∩ Set(1:D))
-        push!(worker_col, has_any_day_off ? "$total*" : "$total")
+        display_str = "$total_count ($(total_difficulty) pts)"
+        push!(worker_col, has_any_day_off ? "$display_str*" : display_str)
         push!(columns, worker_col)
         push!(colindex["names"], worker.name)
     end
@@ -279,9 +305,14 @@ function schedule_to_jobs_agg(schedule, scheduler::AutransScheduler)
     # Total column
     total_col = String[]
     for t in 1:T
-        push!(total_col, string(sum(schedule[:, :, t])))
+        count = sum(schedule[:, :, t])
+        difficulty_pts = count * scheduler.tasks[t].difficulty
+        push!(total_col, "$count ($(difficulty_pts) pts)")
     end
-    push!(total_col, string(sum(schedule)))
+    total_count = sum(schedule)
+    total_difficulty = sum(schedule[w, d, t] * scheduler.tasks[t].difficulty 
+                          for w in 1:N, d in 1:D, t in 1:T)
+    push!(total_col, "$total_count ($(total_difficulty) pts)")
     push!(columns, total_col)
     push!(colindex["names"], "TOTAL")
     

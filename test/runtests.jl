@@ -16,6 +16,10 @@ using Test
         include("test_worker_preferences.jl")
     end
     
+    @testset verbose=true "Workload Offset" begin
+        include("test_workload_offset.jl")
+    end
+    
     @testset verbose=true "Constraint Combinations (Full)" begin
         include("test_constraint_combinations.jl")
     end

@@ -23,10 +23,19 @@ struct AutransTask
     name::String
     num_workers::Int
     day_range::UnitRange{Int}
+    difficulty::Int  # Task difficulty (default 1, must be >= 1)
     
-    AutransTask(name::String, num_workers::Int, day_range::UnitRange{Int}) = new(name, num_workers, day_range)
-    AutransTask(name::String, num_workers::Int, day_in::Int, day_out::Int) = new(name, num_workers, UnitRange(day_in, day_out))
-    AutransTask(name::String, num_workers::Int, day_in::Int) = new(name, num_workers, UnitRange(day_in, day_in))
+    # Full constructor with difficulty
+    function AutransTask(name::String, num_workers::Int, day_range::UnitRange{Int}, difficulty::Int)
+        @assert difficulty >= 1 "Task difficulty must be at least 1"
+        new(name, num_workers, day_range, difficulty)
+    end
+    
+    # Backward-compatible constructors (default difficulty to 1)
+    AutransTask(name::String, num_workers::Int, day_range::UnitRange{Int}) = AutransTask(name, num_workers, day_range, 1)
+    AutransTask(name::String, num_workers::Int, day_in::Int, day_out::Int) = AutransTask(name, num_workers, UnitRange(day_in, day_out), 1)
+    AutransTask(name::String, num_workers::Int, day_in::Int) = AutransTask(name, num_workers, UnitRange(day_in, day_in), 1)
+    AutransTask(name::String, num_workers::Int, day_in::Int, day_out::Int, difficulty::Int) = AutransTask(name, num_workers, UnitRange(day_in, day_out), difficulty)
 end
 
 """

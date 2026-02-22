@@ -13,10 +13,31 @@ import datetime
 
 st.set_page_config(page_title="Autrans", page_icon="🧊", layout="wide")
 
+def detect_dark_mode():
+    """Detect if Streamlit is running in dark mode"""
+    try:
+        # Try to detect from Streamlit config
+        theme_base = st.get_option("theme.base")
+        return theme_base == "dark"
+    except:
+        # Fallback: assume light mode
+        return False
+
 def generate_pastel_color():
-    r = random.randint(127, 255)
-    g = random.randint(127, 255)
-    b = random.randint(127, 255)
+    # Automatically detect dark mode
+    use_dark_colors = detect_dark_mode()
+    
+    if use_dark_colors:
+        # Dark mode: darker, more saturated colors for better contrast
+        r = random.randint(80, 180)
+        g = random.randint(80, 180)
+        b = random.randint(80, 180)
+    else:
+        # Light mode: pastel colors
+        r = random.randint(127, 255)
+        g = random.randint(127, 255)
+        b = random.randint(127, 255)
+    
     return f"#{r:02x}{g:02x}{b:02x}"
 
 def h3_button(txt):
@@ -134,23 +155,25 @@ def update_state(text, i):
     print(text, i)
     print(st.session_state[f"chore_name_{i}"])
 
-def display_chore(chore_name, nb_worker, color, i, with_range=False):
-    chore_row_i = st.columns([2, 2, 2, 1], vertical_alignment='bottom')
+def display_chore(chore_name, nb_worker, difficulty, color, i, with_range=False):
+    chore_row_i = st.columns([3, 2, 2, 2, 1], vertical_alignment='bottom')
     chore_name_i = chore_row_i[0].text_input(f"name", value=chore_name, key=f"chore_name_{i}", label_visibility="collapsed",
                                             help="Name of the chore")
     nb_worker_i = chore_row_i[1].number_input("number of worker", value=nb_worker, key=f"chore_workers_{i}",
                                             help="Number of people needed to complete the chore", label_visibility="collapsed")
-    color_i = chore_row_i[2].color_picker("color", value=color, key=f"chore_color_{i}",
+    difficulty_i = chore_row_i[2].number_input("difficulty", value=difficulty, min_value=1, key=f"chore_difficulty_{i}",
+                                            help="Task difficulty (1=easy, higher=harder)", label_visibility="collapsed")
+    color_i = chore_row_i[3].color_picker("color", value=color, key=f"chore_color_{i}",
                                          help="Choose a color for this chore", label_visibility="collapsed")
     
-    chore_row_i[3].button("", icon=":material/close:", type="secondary", 
+    chore_row_i[4].button("", icon=":material/close:", type="secondary", 
                         key=f"del_chore_{i}", use_container_width=True,
                         on_click=del_chore, args=[i])
     if with_range:
         chore_start, chore_end = st.slider("chore range", 0, len(selected_days)-1, (0, len(selected_days)-1), key=f"chore_range_{i}", label_visibility="collapsed")
     else:
         chore_start, chore_end = 0, len(selected_days)-1
-    return chore_name_i, nb_worker_i, color_i, chore_start, chore_end
+    return chore_name_i, nb_worker_i, difficulty_i, color_i, chore_start, chore_end
 
 def display_worker(worker_name, worker_days_off, i, task_names):
     if st.session_state['with_days_off']:
@@ -345,18 +368,26 @@ def display_general_settings():
 def display_chores_section():
     show_ranges = st.toggle("Show ranges", value=False, help="Show day range selectors for each chore")
 
+    # Add header row with column labels
+    header_row = st.columns([3, 2, 2, 2, 1])
+    header_row[0].markdown("**Task name**")
+    header_row[1].markdown("**People**")
+    header_row[2].markdown("**Difficulty**")
+    header_row[3].markdown("**Color**")
+    # header_row[4] is empty (for delete button column)
+
     if 'chores' not in st.session_state:
         st.session_state['chores'] = []
         default_chore_names = ["Cooking", "Cleaning", "Shopping"]
 
         for i, chore_name in enumerate(default_chore_names):
             color = generate_pastel_color()
-            chore_name_i, nb_worker_i, color_i, chore_start_i, chore_end_i = display_chore(chore_name, 2, color, i, with_range=show_ranges)
-            st.session_state['chores'].append((chore_name_i, nb_worker_i, 1, chore_start_i, chore_end_i, color_i))
+            chore_name_i, nb_worker_i, difficulty_i, color_i, chore_start_i, chore_end_i = display_chore(chore_name, 2, 1, color, i, with_range=show_ranges)
+            st.session_state['chores'].append((chore_name_i, nb_worker_i, difficulty_i, chore_start_i, chore_end_i, color_i))
     else:   
-        for (i, (chore_name_i, nb_worker_i, _, _, _, color)) in enumerate(st.session_state['chores']):
-            chore_name_i, nb_worker_i, color_i, chore_start_i, chore_end_i = display_chore(chore_name_i, nb_worker_i, color, i, with_range=show_ranges)
-            st.session_state['chores'][i] = (chore_name_i, nb_worker_i, 1, chore_start_i, chore_end_i, color_i)
+        for (i, (chore_name_i, nb_worker_i, difficulty_i, _, _, color)) in enumerate(st.session_state['chores']):
+            chore_name_i, nb_worker_i, difficulty_i, color_i, chore_start_i, chore_end_i = display_chore(chore_name_i, nb_worker_i, difficulty_i, color, i, with_range=show_ranges)
+            st.session_state['chores'][i] = (chore_name_i, nb_worker_i, difficulty_i, chore_start_i, chore_end_i, color_i)
 
     row_add = st.columns([2, 2, 2])
     st.markdown('<div class="action-button">', unsafe_allow_html=True)
@@ -658,6 +689,7 @@ if submit:
         #print(selected_days, name_start)
         chore_name = st.session_state[f"chore_name_{i}"]
         nb_people = st.session_state[f"chore_workers_{i}"]
+        difficulty = st.session_state[f"chore_difficulty_{i}"]
         #start = selected_days.index(name_start) +1
         #end = selected_days.index(name_end) +1
         
@@ -790,13 +822,21 @@ with tables:
         **Understanding the Audit Tables:**
         
         - **Schedule**: Shows which workers are assigned to each task on each day
-        - **Affectation per day**: Shows how many tasks each worker does per day (and total)
-        - **Affectation per task**: Shows how many times each worker does each task (and total)
+        - **Affectation per day**: Shows how many tasks each worker does per day (and total difficulty points)
+        - **Affectation per task**: Shows how many times each worker does each task (and total difficulty points)
         
         **Notation:**
         - **\*** (asterisk) = Worker had a day off on that day/task period
         - Numbers with * indicate work done despite having days off in that period
+        - **Format**: `count (difficulty pts)` - Shows both task count and total difficulty points
+        - **Example**: `3 (7 pts)` means 3 tasks with a combined difficulty of 7 points
         - TOTAL row/column shows the sum across all days/tasks
+        
+        **Task Difficulty:**
+        - Each task has a difficulty value (default: 1)
+        - Higher difficulty = more challenging/time-consuming task
+        - Workload is balanced by difficulty points, not just task count
+        - Example: 2 easy tasks (2 pts) ≈ 1 hard task (2 pts)
         """)
     with tabs[3]:
         if 'grid_data' in st.session_state:
@@ -1024,12 +1064,35 @@ with tables:
             **Task Settings:**
             - **Name**: What the task is called
             - **Workers Needed**: How many people are required (e.g., 2 for cooking)
+            - **Difficulty**: How challenging or time-consuming the task is (default: 1)
             - **Color**: Visual identifier in the schedule
             - **Range** (optional): Limit task to specific days
+            
+            **Understanding Task Difficulty:**
+            - **What it is**: A numeric value representing task complexity/effort
+            - **Default**: 1 (standard task)
+            - **Higher values**: More challenging or time-consuming tasks
+            - **Examples**:
+              - Difficulty 1: Quick tasks (taking out trash, setting table)
+              - Difficulty 2: Standard tasks (cooking simple meal, basic cleaning)
+              - Difficulty 3+: Complex tasks (cooking elaborate meal, deep cleaning)
+            
+            **How Difficulty Affects Scheduling:**
+            - Workload is balanced by **difficulty points**, not just task count
+            - Someone doing 3 easy tasks (3 pts) ≈ Someone doing 1 hard task (3 pts)
+            - Ensures fair distribution when tasks vary in complexity
+            - Audit tables show both count and difficulty points: `3 (7 pts)`
+            
+            **When to Use Difficulty:**
+            - Tasks vary significantly in time/effort required
+            - Want to ensure truly fair workload distribution
+            - Some tasks are clearly harder than others
+            - Example: "Dinner for 10" (difficulty 3) vs "Breakfast" (difficulty 1)
             
             **Tips:**
             - Be specific: "Breakfast" and "Dinner" instead of just "Cooking"
             - Consider task duration: Some tasks need more people
+            - Use difficulty to reflect actual effort, not just time
             - Use colors to group related tasks
             - You can have up to 20 tasks
             """)
