@@ -5,9 +5,15 @@ struct AutransWorker
     name::String
     days_off::Set{Int}
     task_preferences::Vector{Int}  # Ranked list of task indices (1-based, empty = no preference)
+    workload_offset::Int  # Adjustment to workload: negative = work less, positive = work more, 0 = no adjustment
     
-    AutransWorker(name::String, days_off::Set{Int} = Set{Int}(), task_preferences::Vector{Int} = Int[]) = new(name, days_off, task_preferences)
-    AutransWorker(name::String, days_off::Vector{Int}, task_preferences::Vector{Int} = Int[]) = new(name, Set(days_off), task_preferences)
+    # Full constructor
+    AutransWorker(name::String, days_off::Set{Int}, task_preferences::Vector{Int}, workload_offset::Int) = new(name, days_off, task_preferences, workload_offset)
+    
+    # Backward-compatible constructors (default workload_offset to 0)
+    AutransWorker(name::String, days_off::Set{Int} = Set{Int}(), task_preferences::Vector{Int} = Int[]) = new(name, days_off, task_preferences, 0)
+    AutransWorker(name::String, days_off::Vector{Int}, task_preferences::Vector{Int} = Int[]) = new(name, Set(days_off), task_preferences, 0)
+    AutransWorker(name::String, days_off::Vector{Int}, task_preferences::Vector{Int}, workload_offset::Int) = new(name, Set(days_off), task_preferences, workload_offset)
 end
 
 """

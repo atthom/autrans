@@ -171,6 +171,25 @@ def display_worker(worker_name, worker_days_off, i, task_names):
                     key=f"del_worker_{i}", use_container_width=True,
                     on_click=del_worker, args=[i])
     
+    # Show workload offset if enabled
+    worker_offset_i = 0
+    if st.session_state.get('show_workload_offset', False):
+        # Initialize offset if not exists
+        if f"worker_offset_{i}" not in st.session_state:
+            st.session_state[f"worker_offset_{i}"] = 0
+        
+        offset_col = st.columns([1])
+        worker_offset_i = offset_col[0].number_input(
+            f"Workload offset for {worker_name_i}",
+            value=st.session_state[f"worker_offset_{i}"],
+            min_value=-10,
+            max_value=10,
+            step=1,
+            key=f"worker_offset_{i}",
+            help="Negative = worked too much before (give fewer tasks), Positive = worked too little (give more tasks)",
+            label_visibility="collapsed"
+        )
+    
     # Show task preferences if enabled
     worker_preferences_i = []
     if st.session_state.get('show_preferences', False) and task_names:
@@ -408,6 +427,14 @@ def on_load_state(state):
 def display_worker_section():
     if 'with_days_off' not in st.session_state:
         st.session_state['with_days_off'] = True
+    
+    # Show workload offset toggle
+    if 'show_workload_offset' not in st.session_state:
+        st.session_state['show_workload_offset'] = False
+    
+    st.session_state['show_workload_offset'] = st.toggle("Show workload offset", 
+                                                          value=st.session_state['show_workload_offset'],
+                                                          help="Compensate for past workload imbalances (negative = worked too much, positive = worked too little)")
     
     # Show task preferences toggle
     if 'show_preferences' not in st.session_state:
@@ -653,14 +680,16 @@ if submit:
         # Collect task preferences if enabled
         w_preferences = []
         if st.session_state.get('show_preferences', False) and task_names:
-            for rank in range(len(task_names)):
-                if f"worker_{i}_pref_rank_{rank}" in st.session_state:
-                    task_name = st.session_state[f"worker_{i}_pref_rank_{rank}"]
-                    task_idx = task_names.index(task_name) + 1  # 1-based index
-                    w_preferences.append(task_idx)
+            pref_list = st.session_state.get(f"worker_pref_list_{i}", [])
+            w_preferences = [task_names.index(task) + 1 for task in pref_list if task in task_names]
         
-        # Add worker with preferences (empty list if not using preferences)
-        workers.append((w_name, w_days_off_idx, w_preferences))
+        # Collect workload offset if enabled
+        w_offset = 0
+        if st.session_state.get('show_workload_offset', False):
+            w_offset = st.session_state.get(f"worker_offset_{i}", 0)
+        
+        # Add worker with preferences and offset
+        workers.append((w_name, w_days_off_idx, w_preferences, w_offset))
 
     # Build constraint name lists from UI selections
     # Map display names to backend names
@@ -1019,6 +1048,23 @@ with tables:
             - Select days when someone is unavailable
             - They won't be assigned tasks on those days
             - Affects workload distribution (see Balance below)
+            
+            **Workload Offset** (Optional):
+            - When enabled, compensate for workload imbalances from previous periods
+            - **How to use:**
+              1. Enable "Show workload offset" toggle
+              2. For each worker, set their offset value:
+                 - **Negative** (-1, -2, etc.): Worker worked too much before → Give fewer tasks
+                 - **Positive** (+1, +2, etc.): Worker worked too little before → Give more tasks
+                 - **Zero** (0): No adjustment needed
+              3. The scheduler adjusts task assignments accordingly
+            - **When to use:**
+              - Multi-trip planning (e.g., monthly cabin trips)
+              - Compensating for past unfairness
+              - Balancing workload across multiple periods
+            - **Example:** 
+              - Alice has offset -2 (worked 2 extra tasks last trip) → Gets 2 fewer tasks this trip
+              - Bob has offset +1 (worked 1 less task last trip) → Gets 1 more task this trip
             
             **Task Preferences** (Optional):
             - When enabled, workers can rank tasks by preference

@@ -7,6 +7,15 @@ using ..Autrans
 """
 Parse worker data from JSON request
 Returns Vector{AutransWorker}
+
+Worker data format: [name, days_off, task_preferences, workload_offset]
+- name: String
+- days_off: Vector{Int} (optional, defaults to [])
+- task_preferences: Vector{Int} (optional, defaults to [])
+- workload_offset: Int (optional, defaults to 0)
+  - Negative: worker should work less (worked too much before)
+  - Positive: worker should work more (worked too little before)
+  - Zero: no adjustment needed
 """
 function parse_workers(workers_data)
     workers = AutransWorker[]
@@ -16,7 +25,9 @@ function parse_workers(workers_data)
         days_off = length(worker_data) >= 2 ? Vector{Int}(worker_data[2]) : Int[]
         # Task preferences (optional, 1-indexed task indices in preference order)
         task_preferences = length(worker_data) >= 3 ? Vector{Int}(worker_data[3]) : Int[]
-        push!(workers, AutransWorker(name, days_off, task_preferences))
+        # Workload offset (optional, defaults to 0)
+        workload_offset = length(worker_data) >= 4 ? Int(worker_data[4]) : 0
+        push!(workers, AutransWorker(name, days_off, task_preferences, workload_offset))
     end
     return workers
 end

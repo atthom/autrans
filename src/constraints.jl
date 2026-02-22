@@ -15,6 +15,38 @@ function deduplicate_constraints(hard::Vector{Constraint{Val{:HARD}}},
     return unique_hard, filtered_soft
 end
 
+"""
+Normalize workload offsets so at least one worker has offset=0
+This prevents infeasibility when all offsets are positive or all negative
+
+Returns a vector of normalized offsets in the same order as workers
+"""
+function normalize_offsets(workers::Vector{AutransWorker})
+    offsets = [w.workload_offset for w in workers]
+    
+    # If all offsets are the same, no normalization needed
+    if all(o == offsets[1] for o in offsets)
+        return offsets
+    end
+    
+    # Find the adjustment needed
+    all_negative = all(o <= 0 for o in offsets)
+    all_positive = all(o >= 0 for o in offsets)
+    
+    if all_negative
+        # Remove the maximum (least negative) to bring someone to 0
+        adjustment = maximum(offsets)
+        return [o - adjustment for o in offsets]
+    elseif all_positive
+        # Remove the minimum to bring someone to 0
+        adjustment = minimum(offsets)
+        return [o - adjustment for o in offsets]
+    else
+        # Mixed positive/negative - already normalized (has at least one zero or crosses zero)
+        return offsets
+    end
+end
+
 
 """
 Generate relaxation hierarchy based on soft constraints and max level.
@@ -120,6 +152,7 @@ end
 OverallEquityConstraint implementation (Proportional)
 When relaxation=0: Workers work exactly proportional to available days (hard constraint, ±1 for rounding)
 When relaxation>0: Workers work proportional with tolerance (soft constraint)
+Supports workload_offset: negative = work less, positive = work more
 """
 function apply_constraint!(model, assign, scheduler::AutransScheduler{ProportionalEquity},
                           c::OverallEquityConstraint, N::Int, D::Int, T::Int, relaxation::Int)
@@ -131,11 +164,20 @@ function apply_constraint!(model, assign, scheduler::AutransScheduler{Proportion
         return
     end
     
+    # Normalize workload offsets
+    normalized_offsets = normalize_offsets(scheduler.workers)
+    
     for (w, worker) in enumerate(scheduler.workers)
         work_days = [d for d in 1:D if d ∉ worker.days_off]
         if !isempty(work_days)
+            # Calculate base expected workload
             expected_float = (length(work_days) / available_worker_days) * total_slots
             expected = round(Int, expected_float)
+            
+            # Apply normalized offset
+            expected = expected + normalized_offsets[w]
+            expected = max(0, expected)  # Can't be negative
+            
             lower = max(0, expected - relaxation)
             upper = expected + relaxation + 1
             
@@ -149,16 +191,27 @@ end
 OverallEquityConstraint implementation (Absolute)
 When relaxation=0: All workers work exactly the same amount (hard constraint, ±1 for rounding)
 When relaxation>0: All workers work similar amounts with tolerance (soft constraint)
+Supports workload_offset: negative = work less, positive = work more
 """
 function apply_constraint!(model, assign, scheduler::AutransScheduler{AbsoluteEquity},
                           c::OverallEquityConstraint, N::Int, D::Int, T::Int, relaxation::Int)
     total_slots = sum(task.num_workers * length(task.day_range) for task in scheduler.tasks)
     expected = div(total_slots, N)
-    lower = max(0, expected - relaxation)
-    upper = expected + relaxation + 1
     
-    @constraint(model, [w in 1:N], sum(assign[w, d, t] for d in 1:D, t in 1:T) >= lower)
-    @constraint(model, [w in 1:N], sum(assign[w, d, t] for d in 1:D, t in 1:T) <= upper)
+    # Normalize workload offsets
+    normalized_offsets = normalize_offsets(scheduler.workers)
+    
+    for (w, worker) in enumerate(scheduler.workers)
+        # Apply normalized offset
+        adjusted_expected = expected + normalized_offsets[w]
+        adjusted_expected = max(0, adjusted_expected)  # Can't be negative
+        
+        lower = max(0, adjusted_expected - relaxation)
+        upper = adjusted_expected + relaxation + 1
+        
+        @constraint(model, sum(assign[w, d, t] for d in 1:D, t in 1:T) >= lower)
+        @constraint(model, sum(assign[w, d, t] for d in 1:D, t in 1:T) <= upper)
+    end
 end
 
 
