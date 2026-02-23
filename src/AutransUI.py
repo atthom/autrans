@@ -6,7 +6,6 @@ import zlib
 import requests
 import base64
 import json
-import pyperclip
 import time
 import random
 import datetime
@@ -344,6 +343,104 @@ def move_soft_constraint_up(i):
         constraints[i], constraints[i-1] = constraints[i-1], constraints[i]
         st.session_state['soft_constraints'] = constraints
 
+def display_constraint_section(constraint_type, constraint_list_key, constraint_options, 
+                               add_callback, del_callback, show_move_buttons=False):
+    """
+    Generic constraint section renderer for both hard and soft constraints.
+    
+    Args:
+        constraint_type: "hard" or "soft" (for display purposes)
+        constraint_list_key: session state key for the constraint list
+        constraint_options: dict of available constraints with descriptions
+        add_callback: function to call when adding a constraint
+        del_callback: function to call when deleting a constraint
+        show_move_buttons: whether to show move up/down buttons (soft constraints only)
+    """
+    constraint_list = st.session_state[constraint_list_key]
+    
+    # Display empty state if no constraints
+    if len(constraint_list) == 0:
+        st.info(f"ℹ️ No {constraint_type} constraints selected. Click 'Add {constraint_type.title()} Constraint' to add one.")
+        return
+    
+    # Handle move actions for soft constraints (before rendering)
+    if show_move_buttons:
+        move_up_idx = None
+        delete_idx = None
+        
+        for i in range(len(constraint_list)):
+            if f"_action_move_up_{i}" in st.session_state and st.session_state[f"_action_move_up_{i}"]:
+                move_up_idx = i
+                del st.session_state[f"_action_move_up_{i}"]
+            if f"_action_del_{i}" in st.session_state and st.session_state[f"_action_del_{i}"]:
+                delete_idx = i
+                del st.session_state[f"_action_del_{i}"]
+        
+        # Perform move action
+        if move_up_idx is not None and move_up_idx > 0:
+            constraints = constraint_list.copy()
+            constraints[move_up_idx], constraints[move_up_idx-1] = constraints[move_up_idx-1], constraints[move_up_idx]
+            st.session_state[constraint_list_key] = constraints
+            st.rerun()
+        
+        # Perform delete action
+        if delete_idx is not None:
+            del_callback(delete_idx)
+            st.rerun()
+    
+    # Render constraints
+    for i, constraint in enumerate(constraint_list):
+        # Determine column layout based on whether we show move buttons
+        if show_move_buttons:
+            constraint_row = st.columns([4, 1, 1], vertical_alignment="bottom")
+        else:
+            constraint_row = st.columns([4, 1], vertical_alignment="bottom")
+        
+        # Get available options (exclude already selected constraints except current)
+        other_constraints = (
+            st.session_state.get('hard_constraints', []) + 
+            st.session_state.get('soft_constraints', [])
+        )
+        other_constraints = [c for j, c in enumerate(other_constraints) 
+                           if not (c == constraint and j == i)]
+        available = [c for c in constraint_options.keys() 
+                    if c not in other_constraints or c == constraint]
+        
+        # Constraint selector
+        selected = constraint_row[0].selectbox(
+            f"{constraint_type.title()} constraint {i}",
+            options=available,
+            index=available.index(constraint) if constraint in available else 0,
+            key=f"{constraint_type}_constraint_{i}",
+            help=constraint_options.get(constraint, ""),
+            label_visibility="collapsed"
+        )
+        st.session_state[constraint_list_key][i] = selected
+        
+        # Move up button (soft constraints only)
+        if show_move_buttons:
+            if i > 0:
+                if constraint_row[1].button("", icon=":material/arrow_upward:", type="secondary",
+                                       key=f"btn_move_up_{constraint_type}_{i}", use_container_width=True):
+                    st.session_state[f"_action_move_up_{i}"] = True
+                    st.rerun()
+            else:
+                constraint_row[1].empty()
+            
+            # Delete button (in column 2 for soft constraints)
+            if constraint_row[2].button("", icon=":material/close:", type="secondary",
+                                   key=f"btn_del_{constraint_type}_constraint_{i}", use_container_width=True):
+                if show_move_buttons:
+                    st.session_state[f"_action_del_{i}"] = True
+                    st.rerun()
+                else:
+                    del_callback(i)
+        else:
+            # Delete button (in column 1 for hard constraints)
+            if constraint_row[1].button("", icon=":material/close:", type="secondary",
+                                   key=f"btn_del_{constraint_type}_constraint_{i}", use_container_width=True):
+                del_callback(i)
+
 def display_general_settings():
     settings_row = st.columns([3, 3, 3], vertical_alignment="center")
     
@@ -405,11 +502,14 @@ def on_save_state():
         "schedule_df", "schedule_colors",  # DataFrame and colors (runtime results)
         "grid_data", "time_data", "jobs_data",  # Schedule results
         "export_workers", "export_tasks", "export_balance",  # Export data
-        "show_schedule"  # Runtime flag
+        "show_schedule",  # Runtime flag
+        "saved_state_string"  # Don't save the saved state itself
     ]
     
     only_keys = [k for k in list(st.session_state.keys()) if k not in exclude_keys]
     only_keys = [k for k in only_keys if ("del" not in k) and ("btn" not in k) and ("add" not in k)]
+    # Exclude temporary flag keys (start with underscore)
+    only_keys = [k for k in only_keys if not k.startswith("_")]
 
     serialized_state = {}
     for k in only_keys:
@@ -423,7 +523,9 @@ def on_save_state():
     serialized_state = json.dumps(serialized_state).encode()
     d = zlib.compress(serialized_state, level=9)
     c = base64.b64encode(d).decode('utf-8')
-    pyperclip.copy(c)
+    
+    # Store in session state instead of copying to clipboard
+    st.session_state['saved_state_string'] = c
 
 
 # eNp1UsGKwjAQ/ZUhpxV6aOLCgmfZ24IHwUORkKUplrqJZCJFxH/fybTaautt8uZN3nuZXEU02Ghn/qzOxQrEVokMBEYTom7reEjYj3eluSQ8kZGgohBbKkESqDKQ1FqbCx+5+BL7DHqOes8hkmh9aGwYOdgwo6oDRk2ymjVlEr1rvo5JHlN3g7rrIV/3SeDRvLlKja7qY22o8o5dFnsO0SNqgiw7ZOSGNFD7qtKKNb5DTQh87EAuOiV60AeJKDGcLcHul0ECZP4STXG05SRaCqEm0eaTDbY4+lwj58mdLZ3FwTIRJxGG78Kv/tiwaK1tkpGyxtORfsuKt4zgK4gHC6k9s9entd7+AdJsxsA=
@@ -434,8 +536,19 @@ def on_load_state(state):
     state = json.loads(state)
 
     # Clear widget-related keys to avoid conflicts
-    widget_keys = [k for k in st.session_state.keys() if k.startswith(("chore_name_", "chore_workers_", "chore_color_", "chore_range_", "worker_name_", "worker_days_off_"))]
+    widget_keys = [k for k in st.session_state.keys() 
+                   if k.startswith(("chore_name_", "chore_workers_", "chore_difficulty_",
+                                   "chore_color_", "chore_range_", 
+                                   "worker_name_", "worker_days_off_",
+                                   "hard_constraint_", "soft_constraint_",
+                                   "constraint_toggle_", "constraint_type_", "constraint_up_",
+                                   "constraint_status_"))]
     for k in widget_keys:
+        del st.session_state[k]
+    
+    # Clear any flag keys (start with underscore) to avoid conflicts
+    flag_keys = [k for k in st.session_state.keys() if k.startswith("_")]
+    for k in flag_keys:
         del st.session_state[k]
 
     for k, v in state.items():
@@ -444,6 +557,9 @@ def on_load_state(state):
         if "btn_add" in k:
             continue
         if k in ["load_state", "save_state", "submit"]:
+            continue
+        # Skip constraint widget keys (they'll be recreated from the constraint lists)
+        if k.startswith(("hard_constraint_", "soft_constraint_", "constraint_toggle_", "constraint_type_", "constraint_up_", "constraint_status_")):
             continue
         
         # Convert date strings back to datetime.date objects
@@ -549,132 +665,122 @@ with settings:
     workers, _ = zip(*st.session_state["workers"])
     workers = list(workers)
     
-    with st.container(border=True):
-        with st.expander("🔧 Advanced Settings", expanded=True):
-            # Initialize constraint lists if not present
-            if 'hard_constraints' not in st.session_state:
-                st.session_state['hard_constraints'] = [
-                    "Task Coverage",
-                    "No Consecutive Tasks", 
-                    "Days Off"
-                ]
+    with st.expander("🔧 Advanced Settings", expanded=True):
+        # Initialize unified constraint list if not present
+        if 'constraints' not in st.session_state:
+            st.session_state['constraints'] = [
+                {"name": "Task Coverage", "enabled": True, "type": "hard", "description": "Each task must have the required number of workers"},
+                {"name": "No Consecutive Tasks", "enabled": True, "type": "hard", "description": "Workers do at most one task per day"},
+                {"name": "Days Off", "enabled": True, "type": "hard", "description": "Workers cannot work on their days off"},
+                {"name": "Overall Equity", "enabled": True, "type": "soft", "description": "Fair distribution of total workload"},
+                {"name": "Daily Equity", "enabled": True, "type": "soft", "description": "Similar amount of work per day"},
+                {"name": "Task Diversity", "enabled": True, "type": "soft", "description": "Everyone participates in each task"},
+                {"name": "Worker Preference", "enabled": False, "type": "soft", "description": "Respect worker task preferences (requires preferences enabled)"}
+            ]
+        
+        st.markdown("#### Constraints")
+        st.markdown("*Set constraint status and reorder with up arrow*")
+        
+        # Add header row
+        header_cols = st.columns([3, 4, 1], vertical_alignment="center")
+        header_cols[0].markdown("**Constraint Name**")
+        header_cols[1].markdown("**Status**")
+        header_cols[2].markdown("**Sort**")
+        
+        # Use constraints in their current order (no auto-sorting)
+        constraints_list = st.session_state['constraints']
+        
+        # Check for reorder actions
+        move_up_idx = None
+        for i in range(len(constraints_list)):
+            if f"_constraint_up_{i}" in st.session_state and st.session_state[f"_constraint_up_{i}"]:
+                move_up_idx = i
+                del st.session_state[f"_constraint_up_{i}"]
+        
+        # Perform reorder (swap with previous item)
+        if move_up_idx is not None and move_up_idx > 0:
+            # Swap with previous constraint
+            constraints_list[move_up_idx], constraints_list[move_up_idx-1] = constraints_list[move_up_idx-1], constraints_list[move_up_idx]
+            st.session_state['constraints'] = constraints_list
+            st.rerun()
+        
+        # Render each constraint
+        for i, constraint in enumerate(constraints_list):
+            cols = st.columns([3, 4, 1], vertical_alignment="center")
             
-            if 'soft_constraints' not in st.session_state:
-                st.session_state['soft_constraints'] = [
-                    "Overall Equity",
-                    "Daily Equity",
-                    "Task Diversity"
-                ]
+            # Name with strikethrough if disabled
+            if constraint['enabled']:
+                cols[0].markdown(f"**{constraint['name']}**", help=constraint['description'])
+            else:
+                cols[0].markdown(f"~~{constraint['name']}~~", help=constraint['description'])
             
-            # Available constraint options with descriptions
-            constraint_options = {
-                "Task Coverage": "Each task must have the required number of workers",
-                "No Consecutive Tasks": "Workers do at most one task per day",
-                "Days Off": "Workers cannot work on their days off",
-                "Overall Equity": "Fair distribution of total workload",
-                "Daily Equity": "Similar amount of work per day",
-                "Task Diversity": "Everyone participates in each task",
-                "Worker Preference": "Respect worker task preferences (requires preferences enabled)"
-            }
+            # Use constraint name in key to maintain independent state
+            constraint_key = constraint['name'].replace(' ', '_')
             
-            st.markdown("#### Hard Constraints")
-            st.markdown("*Must be satisfied for a valid schedule*")
+            # Determine current status for default value
+            if not constraint['enabled']:
+                current_status = "Off"
+            elif constraint['type'] == 'hard':
+                current_status = "Hard"
+            else:
+                current_status = "Soft"
             
-            # Display hard constraints or empty state
-            if len(st.session_state['hard_constraints']) == 0:
-                st.info("ℹ️ No hard constraints selected. Click 'Add Hard Constraint' to add one.")
+            # Single segmented control with 3 options: Hard, Soft, Off
+            new_status = cols[1].segmented_control(
+                "Constraint status",
+                options=["Hard", "Soft", "Off"],
+                default=current_status,
+                key=f"constraint_status_{constraint_key}",
+                label_visibility="collapsed"
+            )
             
-            for i, constraint in enumerate(st.session_state['hard_constraints']):
-                constraint_row = st.columns([4, 1], vertical_alignment="bottom")
-                
-                # Get available options (exclude already selected constraints except current)
-                used_constraints = (st.session_state['hard_constraints'][:i] + 
-                                  st.session_state['hard_constraints'][i+1:] +
-                                  st.session_state['soft_constraints'])
-                available = [c for c in constraint_options.keys() if c not in used_constraints or c == constraint]
-                
-                selected = constraint_row[0].selectbox(
-                    f"Hard constraint {i}",
-                    options=available,
-                    index=available.index(constraint) if constraint in available else 0,
-                    key=f"hard_constraint_{i}",
-                    help=constraint_options.get(constraint, ""),
-                    label_visibility="collapsed"
-                )
-                st.session_state['hard_constraints'][i] = selected
-                
-                constraint_row[1].button("", icon=":material/close:", type="secondary",
-                                       key=f"del_hard_constraint_{i}", use_container_width=True,
-                                       on_click=del_hard_constraint, args=[i])
+            # If new_status is None (deselected), default to Off
+            if new_status is None:
+                new_status = "Off"
             
-            # Add hard constraint button
-            row_add_hard = st.columns([1, 3, 1])
-            row_add_hard[1].button("Add Hard Constraint", icon=":material/add:", 
-                                  type="primary", key="btn_add_hard_constraint",
-                                  on_click=add_hard_constraint, use_container_width=True)
+            # Determine new enabled and type values
+            new_enabled = new_status != "Off"
+            new_type = new_status.lower() if new_status != "Off" else constraint['type']
             
-            st.markdown("#### Soft Constraints")
-            st.markdown("*Relaxed if needed (order matters: first = highest priority)*")
+            # Update constraint if changed - ONLY update the specific constraint's values
+            if new_enabled != constraint['enabled'] or (new_enabled and new_type != constraint['type']):
+                # Find the constraint in the original list by name and update ONLY its properties
+                for c in st.session_state['constraints']:
+                    if c['name'] == constraint['name']:
+                        c['enabled'] = new_enabled
+                        c['type'] = new_type
+                        break
+                st.rerun()
             
-            # Display soft constraints or empty state
-            if len(st.session_state['soft_constraints']) == 0:
-                st.info("ℹ️ No soft constraints selected. Click 'Add Soft Constraint' to add one.")
-            
-            for i, constraint in enumerate(st.session_state['soft_constraints']):
-                constraint_row = st.columns([4, 1, 1], vertical_alignment="bottom")
-                
-                # Get available options
-                used_constraints = (st.session_state['hard_constraints'] +
-                                  st.session_state['soft_constraints'][:i] +
-                                  st.session_state['soft_constraints'][i+1:])
-                available = [c for c in constraint_options.keys() if c not in used_constraints or c == constraint]
-                
-                selected = constraint_row[0].selectbox(
-                    f"Soft constraint {i}",
-                    options=available,
-                    index=available.index(constraint) if constraint in available else 0,
-                    key=f"soft_constraint_{i}",
-                    help=constraint_options.get(constraint, ""),
-                    label_visibility="collapsed"
-                )
-                st.session_state['soft_constraints'][i] = selected
-                
-                # Move up/down buttons
-                if i > 0:
-                    if constraint_row[1].button("", icon=":material/arrow_upward:", type="secondary",
-                                           key=f"move_up_soft_{i}", use_container_width=True):
-                        # Swap with previous item
-                        constraints = st.session_state['soft_constraints'].copy()
-                        constraints[i], constraints[i-1] = constraints[i-1], constraints[i]
-                        st.session_state['soft_constraints'] = constraints
-                        st.rerun()
-                else:
-                    constraint_row[1].empty()
-                
-                if constraint_row[2].button("", icon=":material/close:", type="secondary",
-                                       key=f"del_soft_constraint_{i}", use_container_width=True):
-                    del_soft_constraint(i)
+            # Up arrow (available for all constraints except first)
+            if i > 0:
+                if cols[2].button("↑", key=f"constraint_up_{constraint_key}_{i}", use_container_width=True):
+                    st.session_state[f"_constraint_up_{i}"] = True
                     st.rerun()
-            
-            # Add soft constraint button
-            row_add_soft = st.columns([1, 3, 1])
-            row_add_soft[1].button("Add Soft Constraint", icon=":material/add:",
-                                  type="primary", key="btn_add_soft_constraint",
-                                  on_click=add_soft_constraint, use_container_width=True)
-    
-    with st.container(border=True):
-        row4 = st.text_input("State Input")
-        row5 = st.columns([2, 2, 2])
-        row7 = st.columns([2, 2, 2])
+            else:
+                cols[2].empty()
 
-        load_state = row5[2].button("Load State", type="secondary", key="load_state", 
-                                    on_click= lambda : on_load_state(str(row4)))
-
-        save_state = row5[0].button("Copy State", type="secondary", key="save_state", 
-                                    on_click=on_save_state)
-
-        if save_state:
-            row7[0].badge("Copied to Clipboard", icon=":material/check:", color="green")
+    with st.expander("💾 State Management", expanded=True):
+        # Generate State button
+        st.text("")
+        if st.button("Generate State", type="primary", key="save_state", use_container_width=True):
+            on_save_state()
+        
+        # Show state with copy button if it exists
+        if 'saved_state_string' in st.session_state:
+            st.code(st.session_state['saved_state_string'], language=None)
+            st.caption("✅ Click the copy button above to copy your state code")
+        st.text("")
+        
+        # Load State section
+        row4 = st.text_input("Paste state code to load", label_visibility="collapsed", placeholder="Paste state code here...")
+        
+        if st.button("Load State", type="secondary", key="load_state", use_container_width=True):
+            if row4:
+                on_load_state(str(row4))
+                st.rerun()
+            else:
+                st.error("Please paste a state code first")
 
     row6 = st.columns([2, 2, 2])
     st.markdown('<div class="action-button">', unsafe_allow_html=True)
@@ -725,7 +831,7 @@ if submit:
         # Add worker with preferences and offset
         workers.append((w_name, w_days_off_idx, w_preferences, w_offset))
 
-    # Build constraint name lists from UI selections
+    # Build constraint name lists from unified constraint structure
     # Map display names to backend names
     constraint_name_map = {
         "Task Coverage": "TaskCoverage",
@@ -737,8 +843,10 @@ if submit:
         "Worker Preference": "WorkerPreference"
     }
     
-    hard_constraints = [constraint_name_map[c] for c in st.session_state.get('hard_constraints', [])]
-    soft_constraints = [constraint_name_map[c] for c in st.session_state.get('soft_constraints', [])]
+    # Extract enabled constraints from unified list
+    enabled_constraints = [c for c in st.session_state.get('constraints', []) if c['enabled']]
+    hard_constraints = [constraint_name_map[c['name']] for c in enabled_constraints if c['type'] == 'hard']
+    soft_constraints = [constraint_name_map[c['name']] for c in enabled_constraints if c['type'] == 'soft']
     
     payload = {
         "workers": workers,
@@ -828,8 +936,8 @@ with tables:
         - **Affectation per task**: Shows how many times each worker does each task (and total difficulty points)
         
         **Notation:**
-        - **\*** (asterisk) = Worker had a day off on that day/task period
-        - Numbers with * indicate work done despite having days off in that period
+        - **\\*** (asterisk) = Worker had a day off on that day/task period
+        - Numbers with \\* indicate work done despite having days off in that period
         - **Format**: `count (difficulty pts)` - Shows both task count and total difficulty points
         - **Example**: `3 (7 pts)` means 3 tasks with a combined difficulty of 7 points
         - TOTAL row/column shows the sum across all days/tasks
@@ -1054,7 +1162,7 @@ with tables:
             """)
         
         # Tasks Section
-        with st.expander("📋 Tasks"):
+        with st.expander("📋 Tasks per day"):
             st.markdown("""
             ### Defining Your Tasks
             
@@ -1186,23 +1294,35 @@ with tables:
             
             ---
             
-            ### Hard vs Soft Constraints
+            ### Constraint Status Options
             
-            **Hard Constraints** 🔴
+            Each constraint has 3 possible statuses:
+            
+            **Hard** 🔴
             - **MUST be satisfied** for a valid schedule
             - If impossible, the schedule will fail
             - Use for non-negotiable requirements
             - Example: "Tasks must be covered" is typically hard
             
-            **Soft Constraints** 🟡
+            **Soft** 🟡
             - **Preferred but flexible**
             - Can be relaxed if needed to find a solution
-            - **Order matters**: First = highest priority
-            - Use the ↑ button to reorder priorities
+            - **Order matters**: Soft constraints earlier in the list = higher priority
+            - Use the ↑ button to reorder soft constraints
+            
+            **Off** ⚪
+            - Constraint is disabled and not applied
+            - Use when you don't want this rule enforced
             
             **When to Use Each:**
             - Hard: Absolute requirements (safety, coverage, availability)
             - Soft: Preferences and optimization goals (fairness, diversity)
+            - Off: Rules you want to skip for this schedule
+            
+            **Reordering:**
+            - Constraints can be reordered using the ↑ button
+            - This doesn't change their status (Hard/Soft/Off)
+            - Only soft constraints need priority ordering (first = highest priority)
             
             ---
             
