@@ -8,33 +8,35 @@ struct FailureInfo
     status::String
     capacity_analysis::Dict{String, Any}
     constraint_details::Vector{String}
+    conflict_analysis::Vector{String}
 end
 
 """
 Analyze problem capacity and feasibility
 """
 function analyze_capacity(scheduler::AutransScheduler, N, D, T)
-    total_slots = sum(task.num_workers * length(task.day_range) for task in scheduler.tasks)
+    total_slots = sum(task.num_workers * length(task.day_range) for task in scheduler.tasks; init=0)
     available_worker_days = sum(D - length(worker.days_off ∩ Set(1:D)) for worker in scheduler.workers)
     
     utilization = available_worker_days > 0 ? (total_slots / available_worker_days * 100) : Inf
     
-    # Per-day analysis
-    daily_issues = String[]
+    # Day-by-day breakdown
+    daily_breakdown = []
     for d in 1:D
-        workers_needed = sum(task.num_workers for task in scheduler.tasks if d in task.day_range)
+        slots_needed = sum(task.num_workers for task in scheduler.tasks if d in task.day_range; init=0)
         workers_available = count(w -> d ∉ w.days_off, scheduler.workers)
-        
-        if workers_needed > workers_available
-            push!(daily_issues, "Day $d: needs $workers_needed workers, only $workers_available available (deficit: $(workers_needed - workers_available))")
-        end
+        push!(daily_breakdown, Dict(
+            "day" => d,
+            "slots_needed" => slots_needed,
+            "workers_available" => workers_available
+        ))
     end
     
     return Dict(
         "total_slots" => total_slots,
         "available_worker_days" => available_worker_days,
         "utilization_percent" => round(utilization, digits=1),
-        "daily_issues" => daily_issues,
+        "daily_breakdown" => daily_breakdown,
         "num_workers" => N,
         "num_days" => D,
         "num_tasks" => T
@@ -68,18 +70,156 @@ function extract_solution(model, assign)
     end
 end
 
+# ============================================================================
+# INFEASIBILITY DETECTION - Fast arithmetic checks
+# ============================================================================
+
+"""
+Day context for infeasibility checking
+"""
+struct DayContext
+    day::Int
+    available_workers::Int
+    tasks_on_day::Vector{AutransTask}
+end
+
+"""
+Prepare context for a specific day
+"""
+function prepare_day_context(day::Int, scheduler::AutransScheduler)
+    available_workers = count(w -> day ∉ w.days_off, scheduler.workers)
+    tasks_on_day = [task for task in scheduler.tasks if day in task.day_range]
+    return DayContext(day, available_workers, tasks_on_day)
+end
+
+"""
+Check if any single task requires more workers than available
+"""
+function check_task_impossibility(ctx::DayContext, found_types::Set{String})
+    in("task_impossible", found_types) && return nothing
+    
+    for task in ctx.tasks_on_day
+        if task.num_workers > ctx.available_workers
+            return Dict(
+                "type" => "task_impossible",
+                "day" => ctx.day,
+                "task" => task.name,
+                "required" => task.num_workers,
+                "available" => ctx.available_workers
+            )
+        end
+    end
+    return nothing
+end
+
+"""
+Check if total capacity is mathematically impossible (even with worker reuse)
+"""
+function check_capacity_violation(ctx::DayContext, found_types::Set{String})
+    in("capacity_violation_absolute", found_types) && return nothing
+    
+    total_slots_needed = sum(task.num_workers for task in ctx.tasks_on_day)
+    max_possible_slots = ctx.available_workers * length(ctx.tasks_on_day)
+    
+    if total_slots_needed > max_possible_slots
+        return Dict(
+            "type" => "capacity_violation_absolute",
+            "day" => ctx.day,
+            "needed" => total_slots_needed,
+            "max_possible" => max_possible_slots,
+            "num_tasks" => length(ctx.tasks_on_day),
+            "available_workers" => ctx.available_workers
+        )
+    end
+    return nothing
+end
+
+"""
+Check if NoConsecutiveTasks constraint makes the day impossible
+"""
+function check_consecutive_impossibility(ctx::DayContext, scheduler::AutransScheduler, found_types::Set{String})
+    in("consecutive_impossible", found_types) && return nothing
+    
+    # Check if NoConsecutiveTasks constraint exists
+    has_no_consecutive = any(c -> c.constraint isa NoConsecutiveTasksConstraint, scheduler.hard_constraints)
+    !has_no_consecutive && return nothing
+    
+    # Check all pairs of tasks on this day
+    for i in 1:length(ctx.tasks_on_day)
+        for j in (i+1):length(ctx.tasks_on_day)
+            task1 = ctx.tasks_on_day[i]
+            task2 = ctx.tasks_on_day[j]
+            
+            # If these tasks can't overlap and together need more workers than available
+            min_workers_needed = task1.num_workers + task2.num_workers
+            if min_workers_needed > ctx.available_workers
+                return Dict(
+                    "type" => "consecutive_impossible",
+                    "day" => ctx.day,
+                    "task1" => task1.name,
+                    "task2" => task2.name,
+                    "min_workers_needed" => min_workers_needed,
+                    "available" => ctx.available_workers
+                )
+            end
+        end
+    end
+    return nothing
+end
+
+"""
+Detect obvious infeasibilities using simple arithmetic (no solver needed)
+Returns vector of issue dictionaries, or empty vector if no obvious issues found
+"""
+function detect_obvious_infeasibilities(scheduler::AutransScheduler, N::Int, D::Int)
+    issues = []
+    found_types = Set{String}()
+    max_types = 3  # task_impossible, capacity_violation_absolute, consecutive_impossible
+    
+    for day in 1:D
+        # Early exit if we've found all types of issues
+        length(found_types) >= max_types && break
+        
+        # Prepare day context
+        ctx = prepare_day_context(day, scheduler)
+        isempty(ctx.tasks_on_day) && continue
+        
+        # Try each check - add issue if found and update found_types
+        for check_fn in [check_task_impossibility, check_capacity_violation]
+            issue = check_fn(ctx, found_types)
+            if issue !== nothing
+                push!(issues, issue)
+                push!(found_types, issue["type"])
+            end
+        end
+        
+        # Consecutive check needs scheduler parameter
+        if length(found_types) < max_types
+            issue = check_consecutive_impossibility(ctx, scheduler, found_types)
+            if issue !== nothing
+                push!(issues, issue)
+                push!(found_types, issue["type"])
+            end
+        end
+    end
+    
+    return issues
+end
+
+
+# ============================================================================
+# SOLVER FUNCTIONS
+# ============================================================================
+
 """
 Apply hard constraints and collect objective terms
-Returns vector of objective terms from hard constraints
 """
 function apply_hard_constraints(model, assign, scheduler::AutransScheduler, N::Int, D::Int, T::Int)
     objective_terms = []
     
     for constraint in scheduler.hard_constraints
-        result = apply!(model, assign, scheduler, constraint, N, D, T)
-        if result !== nothing
-            push!(objective_terms, result)
-        end
+        obj_result = apply!(model, assign, scheduler, constraint, N, D, T)
+        obj_result !== nothing && push!(objective_terms, obj_result)
     end
     
     return objective_terms
@@ -97,71 +237,31 @@ function apply_soft_constraints_and_build_objective!(model, assign, scheduler::A
     # Apply soft constraints with relaxation
     for (i, constraint) in enumerate(scheduler.soft_constraints)
         relaxation = relaxation_levels[i]
-        result = apply!(model, assign, scheduler, constraint, N, D, T, relaxation)
-        if result !== nothing
-            push!(objective_terms, result)
-        end
+        obj_result = apply!(model, assign, scheduler, constraint, N, D, T, relaxation)
+        obj_result !== nothing && push!(objective_terms, obj_result)
     end
     
     # Set objective function if there are any objective terms
-    if !isempty(objective_terms)
-        @objective(model, Min, sum(objective_terms))
-    end
-end
-
-"""
-Quick feasibility check before attempting full solve
-Returns (is_feasible, reason)
-"""
-function quick_feasibility_check(scheduler::AutransScheduler)
-    total_slots = sum(task.num_workers * length(task.day_range) for task in scheduler.tasks)
-    available_worker_days = sum(scheduler.num_days - length(worker.days_off ∩ Set(1:scheduler.num_days)) 
-                                for worker in scheduler.workers)
+    !isempty(objective_terms) && @objective(model, Min, sum(objective_terms))
     
-    utilization = available_worker_days > 0 ? (total_slots / available_worker_days) : Inf
-    
-    # If utilization is over 200%, it's definitely infeasible
-    if utilization > 2.0
-        return (false, "Utilization $(round(utilization*100, digits=1))% exceeds 200% - not enough worker capacity")
-    end
-    
-    # Check if any day has impossible requirements
-    for d in 1:scheduler.num_days
-        workers_needed = sum(task.num_workers for task in scheduler.tasks if d in task.day_range)
-        workers_available = count(w -> d ∉ w.days_off, scheduler.workers)
-        
-        if workers_needed > workers_available
-            return (false, "Day $d requires $workers_needed workers but only $workers_available available")
-        end
-    end
-    
-    return (true, "")
+    return nothing
 end
 
 """
 Solve at a specific relaxation level (creates new model each time)
-Returns a tuple: (solution, status_str)
 """
 function solve_at_level(scheduler::AutransScheduler, N::Int, D::Int, T::Int, 
-                       relaxation_levels::Vector{Int}, level_idx::Int)
-    # Create model
+                       relaxation_levels::Vector{Int})
     model, assign = create_model(scheduler, N, D, T)
-    
-    # Apply hard constraints and collect their objectives
     base_objective_terms = apply_hard_constraints(model, assign, scheduler, N, D, T)
-    
-    # Apply soft constraints and build objective
     apply_soft_constraints_and_build_objective!(model, assign, scheduler, N, D, T,
                                                relaxation_levels, base_objective_terms)
-    
-    # Solve and extract solution
     optimize!(model)
     return extract_solution(model, assign)
 end
 
 """
 Create a model with hard constraints already applied
-Returns (model, assign, objective_terms_from_hard_constraints)
 """
 function create_model_with_hard_constraints(scheduler::AutransScheduler, N::Int, D::Int, T::Int)
     model, assign = create_model(scheduler, N, D, T)
@@ -171,20 +271,20 @@ end
 
 """
 Solve at a specific relaxation level using a pre-built model with hard constraints
-Returns a tuple: (solution, status_str)
 """
 function solve_at_level_with_model(model, assign, scheduler::AutransScheduler, 
                                    N::Int, D::Int, T::Int,
                                    base_objective_terms::Vector,
                                    relaxation_levels::Vector{Int})
-    # Apply soft constraints and build objective
     apply_soft_constraints_and_build_objective!(model, assign, scheduler, N, D, T,
                                                relaxation_levels, base_objective_terms)
-    
-    # Solve and extract solution
     optimize!(model)
     return extract_solution(model, assign)
 end
+
+# ============================================================================
+# MAIN SOLVE FUNCTION
+# ============================================================================
 
 """
 Solve the scheduling optimization problem with hierarchical relaxation
@@ -209,25 +309,53 @@ function solve(scheduler::AutransScheduler)
         println("Available worker-days: $(capacity_analysis["available_worker_days"])")
         println("Utilization: $(capacity_analysis["utilization_percent"])%")
         
-        if !isempty(capacity_analysis["daily_issues"])
-            println("\n⚠️  Daily capacity issues:")
-            for issue in capacity_analysis["daily_issues"]
-                println("  - $issue")
-            end
+        println("\nDay-by-Day Breakdown:")
+        for day_info in capacity_analysis["daily_breakdown"]
+            println("  Day $(day_info["day"]): $(day_info["slots_needed"]) slots needed, $(day_info["workers_available"]) workers available")
         end
         println("="^80)
     end
     
-    # Quick feasibility check
-    is_feasible, reason = quick_feasibility_check(scheduler)
-    if !is_feasible
+    # Pre-check: Detect obvious infeasibilities BEFORE any solver attempts
+    if scheduler.verbose
+        println("\n🔍 Pre-check: Testing for obvious infeasibilities...")
+    end
+    
+    obvious_issues = detect_obvious_infeasibilities(scheduler, N, D)
+    
+    if !isempty(obvious_issues)
         if scheduler.verbose
-            println("\n❌ QUICK FEASIBILITY CHECK FAILED")
-            println("Reason: $reason")
+            println("✓ Found obvious infeasibility - skipping solver entirely")
+            println("  Detected $(length(obvious_issues)) issue(s) via fast arithmetic checks")
         end
         
-        failure_info = FailureInfo(0, "INFEASIBLE", capacity_analysis, [reason])
+        # Generate structured diagnostic data
+        diagnostic_data = generate_obvious_diagnostics(obvious_issues)
+        
+        # Convert to text format for console display
+        console_output = format_diagnostics_for_console(diagnostic_data)
+        
+        if scheduler.verbose && !isempty(console_output)
+            println("\n" * "="^80)
+            println(diagnostic_data["title"])
+            println("="^80)
+            for line in console_output[2:end]  # Skip title (already printed)
+                println(line)
+            end
+            println("="^80)
+        end
+        
+        # Store the structured data directly in conflict_analysis as a single JSON-formatted string
+        # This allows the UI to parse it properly
+        conflict_analysis_json = JSON3.write(diagnostic_data)
+        conflict_analysis = [conflict_analysis_json]
+        
+        failure_info = FailureInfo(0, "OBVIOUSLY_INFEASIBLE", capacity_analysis, String[], conflict_analysis)
         return (nothing, failure_info)
+    end
+    
+    if scheduler.verbose
+        println("  No obvious issues detected, proceeding with solver...")
     end
     
     # Generate relaxation hierarchy based on soft constraints
@@ -247,10 +375,9 @@ function solve(scheduler::AutransScheduler)
         println("\nStep 1: Testing strictest constraints (level 1)...")
     end
     
-    solution, status_str = solve_at_level(scheduler, N, D, T, hierarchy[1], 1)
+    solution, status_str = solve_at_level(scheduler, N, D, T, hierarchy[1])
     
     if solution !== nothing
-        # Success at level 1 - optimal solution!
         if scheduler.verbose
             println("✅ OPTIMAL SOLUTION at level 1 (strictest constraints)")
         end
@@ -271,7 +398,7 @@ function solve(scheduler::AutransScheduler)
     end
     
     solution, status_str = solve_at_level_with_model(model, assign, scheduler, N, D, T, 
-                                                     base_objective_terms, hierarchy[max_level])
+                                                      base_objective_terms, hierarchy[max_level])
     
     if solution === nothing
         # Even max relaxation failed - truly infeasible
@@ -285,7 +412,29 @@ function solve(scheduler::AutransScheduler)
             push!(constraint_details, "$(constraint.name): relaxation = $(hierarchy[max_level][i])")
         end
         
-        failure_info = FailureInfo(max_level, status_str, capacity_analysis, constraint_details)
+        # Generic infeasibility message (no IIS analysis)
+        conflict_analysis = [
+            "Problem is infeasible with current constraints.",
+            "",
+            "The pre-check did not find obvious issues, but the solver could not find a solution.",
+            "",
+            "Consider:",
+            "  - Add more workers to handle the workload",
+            "  - Adjust worker days off",
+            "  - Change some hard constraints to soft constraints"
+        ]
+        
+        if scheduler.verbose
+            println("\n" * "="^80)
+            println("CONFLICT ANALYSIS")
+            println("="^80)
+            for diagnostic in conflict_analysis
+                println(diagnostic)
+            end
+            println("="^80)
+        end
+        
+        failure_info = FailureInfo(max_level, status_str, capacity_analysis, constraint_details, conflict_analysis)
         return (nothing, failure_info)
     end
     
@@ -293,8 +442,7 @@ function solve(scheduler::AutransScheduler)
         println("✅ Feasible at maximum relaxation")
     end
     
-    # Step 3: Binary search for minimum relaxation needed (between 2 and max_level)
-    # Reuse the same model for all binary search iterations!
+    # Step 3: Binary search for minimum relaxation needed
     if scheduler.verbose
         println("\nStep 3: Binary search with model reuse...")
     end
@@ -310,25 +458,19 @@ function solve(scheduler::AutransScheduler)
             println("  Testing level $mid (range: $low-$high)...")
         end
         
-        solution, status_str = solve_at_level_with_model(model, assign, scheduler, N, D, T,
-                                                         base_objective_terms, hierarchy[mid])
+        solution, _ = solve_at_level_with_model(model, assign, scheduler, N, D, T,
+                                                base_objective_terms, hierarchy[mid])
         
         if solution !== nothing
             # Found solution at this level - try tighter constraints
             best_solution = solution
             best_level = mid
             high = mid - 1
-            
-            if scheduler.verbose
-                println("  ✅ Feasible - trying tighter")
-            end
+            scheduler.verbose && println("  ✅ Feasible - trying tighter")
         else
             # Need more relaxation
             low = mid + 1
-            
-            if scheduler.verbose
-                println("  ❌ Infeasible - need more relaxation")
-            end
+            scheduler.verbose && println("  ❌ Infeasible - need more relaxation")
         end
     end
     

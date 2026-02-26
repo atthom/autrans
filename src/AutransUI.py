@@ -46,40 +46,103 @@ def h3_button(txt):
         st.rerun()
 
 
-@st.dialog("Schedule is not possible", width="large")
-def sat_schedule(txt, details=None):
-    st.markdown(f"<h3 style='text-align: center; color: #dc3545;'>Schedule is not feasible</h3>", unsafe_allow_html=True)
-    
+@st.dialog("Schedule is not feasible", width="large")
+def sat_schedule(txt, details=None, tasks=None, workers=None, nb_days=None, hard_constraints=None, soft_constraints=None):
     # Show detailed diagnostics if available
     if details and isinstance(details, dict):
-        # Capacity analysis
+        # Global Metrics (always visible, non-collapsible)
+        # Calculate from frontend data
+        if tasks and workers and nb_days:
+            # Calculate metrics
+            num_tasks = len(tasks)
+            total_slots = sum(task[1] for task in tasks)  # task[1] is nb_workers
+            num_workers = len(workers)
+            avg_workload = round(total_slots / num_workers, 1) if num_workers > 0 else "N/A"
+            
+            # Count constraints
+            num_constraints = 0
+            if hard_constraints:
+                num_constraints += len(hard_constraints)
+            if soft_constraints:
+                num_constraints += len(soft_constraints)
+            
+            st.markdown("<h2 style='text-align: center;'>Global Metrics</h2>", unsafe_allow_html=True)
+            col1, col2, col3, col4, col5, col6 = st.columns(6)
+            col1.metric("Days", nb_days)
+            col2.metric("Workers", num_workers)
+            col3.metric("Tasks", num_tasks)
+            col4.metric("Task Slots", total_slots)
+            col5.metric("Daily Workload", avg_workload)
+            col6.metric("Constraints", num_constraints)
+        
+        # Schedule Analysis (collapsible, expanded by default)
+        if "conflict_analysis" in details and details["conflict_analysis"]:
+            try:
+                # Parse the JSON string
+                diagnostic_data = json.loads(details["conflict_analysis"][0])
+                
+                with st.expander(f"**{diagnostic_data.get('title', 'Schedule Analysis')}**", expanded=True):
+                    # Warning cards (orange/red) - one per warning
+                    for warning in diagnostic_data.get('warnings', []):
+                        st.warning(warning)
+                    
+                    # Suggestion cards (green with emoji) - one per suggestion
+                    for suggestion in diagnostic_data.get('suggestions', []):
+                        st.success(f"💡 {suggestion}")
+            except (json.JSONDecodeError, KeyError, IndexError) as e:
+                # Fallback to old format if JSON parsing fails
+                with st.expander("**Schedule Analysis**", expanded=True):
+                    st.error(f"Error parsing diagnostic data: {e}")
+                    for diagnostic in details["conflict_analysis"]:
+                        st.text(diagnostic)
+        
+        # Day by Day Breakdown (collapsible but expanded by default)
         if "capacity" in details:
             capacity = details["capacity"]
-            st.markdown("### 📊 Capacity Analysis")
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Total Slots Needed", capacity.get("total_slots", "N/A"))
-            col2.metric("Available Worker-Days", capacity.get("available_worker_days", "N/A"))
-            col3.metric("Utilization", f"{capacity.get('utilization_percent', 'N/A')}%")
-            
-            # Daily issues
-            if capacity.get("daily_issues"):
-                st.markdown("#### ⚠️ Daily Capacity Issues")
-                for issue in capacity["daily_issues"][:5]:  # Show first 5
-                    st.warning(issue)
+            if capacity.get("daily_breakdown"):
+                with st.expander("**Day by Day Breakdown**", expanded=True):
+                    # Create table data
+                    table_data = []
+                    for day_info in capacity["daily_breakdown"]:
+                        day = day_info.get("day", "?")
+                        slots = day_info.get("slots_needed", "?")
+                        workers_avail = day_info.get("workers_available", "?")
+                        
+                        # Get workers on day off for this day
+                        workers_off = day_info.get("workers_off", [])
+                        workers_off_str = ", ".join(workers_off) if workers_off else "-"
+                        
+                        table_data.append({
+                            "Day": day,
+                            "Task Slots": slots,
+                            "Workers Available": workers_avail,
+                            "Workers Unavailable": workers_off_str
+                        })
+                    
+                    # Display as DataFrame table with centered styling
+                    df_breakdown = pd.DataFrame(table_data)
+                    
+                    # Style the dataframe to center all content
+                    styled_df = df_breakdown.style.set_properties(**{
+                        'text-align': 'center'
+                    }).set_table_styles([
+                        {'selector': 'th', 'props': [('text-align', 'center')]}
+                    ])
+                    
+                    st.dataframe(styled_df, use_container_width=True, hide_index=True)
         
-        # Constraint details
+        # Constraint details (expanded by default)
         if "constraints" in details and details["constraints"]:
-            st.markdown("### 🔧 Constraint Requirements")
-            st.markdown("*These are the requirements that couldn't be satisfied:*")
-            for constraint in details["constraints"][:8]:  # Show first 8
-                st.text(f"• {constraint}")
+            with st.expander("Constraint Details", expanded=True):
+                for constraint in details["constraints"][:8]:
+                    st.text(f"• {constraint}")
         
-        # Failed level
-        if "failed_level" in details:
-            st.info(f"Failed at relaxation level {details['failed_level']}")
+        # Failed level (only show if not None)
+        if "failed_level" in details and details["failed_level"] is not None:
+            st.caption(f"Failed at relaxation level {details['failed_level']}")
     else:
         # Fallback: show basic message if no detailed diagnostics available
-        st.markdown("### 📊 Problem Summary")
+        st.markdown("### Problem Summary")
         st.text(txt)
     
     # OK button
@@ -674,7 +737,7 @@ with settings:
                 {"name": "Days Off", "enabled": True, "type": "hard", "description": "Workers cannot work on their days off"},
                 {"name": "Overall Equity", "enabled": True, "type": "soft", "description": "Fair distribution of total workload"},
                 {"name": "Daily Equity", "enabled": True, "type": "soft", "description": "Similar amount of work per day"},
-                {"name": "Task Diversity", "enabled": True, "type": "soft", "description": "Everyone participates in each task"},
+                  {"name": "Task Diversity", "enabled": True, "type": "soft", "description": "Everyone participates in each task"},
                 {"name": "Worker Preference", "enabled": False, "type": "soft", "description": "Respect worker task preferences (requires preferences enabled)"}
             ]
         
@@ -862,15 +925,13 @@ if submit:
     import time
 
     t = time.time()
-    res1 = requests.post("http://127.0.0.1:8080/sat", json=payload)
-    sat_agg = res1.json()
-
-    t_sat = round(time.time() - t, 2)
-
-    if sat_agg["sat"]:
-        res = requests.post("http://127.0.0.1:8080/schedule", json=payload)
+    
+    # Call /schedule directly (no need for SAT check)
+    res = requests.post("http://127.0.0.1:8080/schedule", json=payload)
+    
+    if res.status_code == 200:
+        # Success - schedule was generated
         all_agg = res.json()
-        
         t_schedule = round(time.time() - t, 2)
 
         colors = [color for _, _, _, _, _, color in st.session_state['chores']]
@@ -895,9 +956,19 @@ if submit:
         # Show success message
         st.success("✅ Schedule generated successfully! Click the **Schedule** tab above to view it.", icon="🎉")
     else:
+        # Failure - schedule is infeasible
+        failure_response = res.json()
         # Pass detailed diagnostics if available
-        details = sat_agg.get("details", None)
-        sat_schedule(sat_agg["msg"], details)
+        details = failure_response.get("details", None)
+        sat_schedule(
+            failure_response.get("msg", "Schedule is not feasible"),
+            details=details,
+            tasks=all_tasks,
+            workers=workers,
+            nb_days=nb_days,
+            hard_constraints=hard_constraints,
+            soft_constraints=soft_constraints
+        )
  
 
 with tables:

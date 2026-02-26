@@ -1,6 +1,6 @@
 module Autrans
 
-using JuMP, HiGHS, DataFrames, Printf
+using JuMP, HiGHS, DataFrames, Printf, JSON3
 
 include("structs.jl")
 include("constraints.jl")

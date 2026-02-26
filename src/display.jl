@@ -1,5 +1,139 @@
 using DataFrames, Printf
 
+# ============================================================================
+# INFEASIBILITY DIAGNOSTIC FORMATTING
+# ============================================================================
+
+"""
+Format a task impossibility issue - clean, no decorations
+Returns: "Day X: Task 'Y' requires N workers, only M available"
+"""
+function format_task_impossible(issue::Dict)
+    return "Day $(issue["day"]): Task '$(issue["task"])' requires $(issue["required"]) workers, only $(issue["available"]) available"
+end
+
+"""
+Format a capacity violation issue - clean, concise
+Returns: "Day X: Needs N assignments, only M possible"
+"""
+function format_capacity_violation(issue::Dict)
+    return "Day $(issue["day"]): Needs $(issue["needed"]) assignments across $(issue["num_tasks"]) tasks, only $(issue["max_possible"]) possible"
+end
+
+"""
+Format a consecutive task conflict issue - clean
+Returns: "Day X: Tasks 'A' and 'B' conflict (need N workers, only M available)"
+"""
+function format_consecutive_impossible(issue::Dict)
+    return "Day $(issue["day"]): Tasks '$(issue["task1"])' and '$(issue["task2"])' conflict (need $(issue["min_workers_needed"]) workers, only $(issue["available"]) available)"
+end
+
+"""
+Generate actionable suggestions based on issue types found
+Returns array of clean suggestion strings (no bullets)
+"""
+function generate_suggestions(issues::Vector)
+    suggestions = String[]
+    
+    has_type(type) = any(i["type"] == type for i in issues)
+    
+    if has_type("task_impossible")
+        push!(suggestions, "Add more workers (some tasks exceed total worker count)")
+    end
+    if has_type("capacity_violation_absolute")
+        push!(suggestions, "Add more workers OR reduce task requirements OR spread tasks across more days")
+    end
+    if has_type("consecutive_impossible")
+        push!(suggestions, "Change NoConsecutiveTasks to SOFT constraint OR add more workers")
+    end
+    
+    return suggestions
+end
+
+"""
+Generate diagnostic data structure from infeasibility issues
+Returns structured Dict for card-based UI rendering:
+{
+    "title" => "Schedule Analysis",
+    "warnings" => ["Day 1: Task 'X' requires...", ...],
+    "suggestions" => ["Add more workers", ...],
+    "emoji" => "💡"
+}
+"""
+function generate_obvious_diagnostics(issues::Vector)
+    isempty(issues) && return Dict(
+        "title" => "Schedule Analysis",
+        "warnings" => String[],
+        "suggestions" => String[]
+    )
+    
+    warnings = String[]
+    
+    # Process each issue and create clean warning strings
+    for issue in issues
+        warning = if issue["type"] == "task_impossible"
+            format_task_impossible(issue)
+        elseif issue["type"] == "capacity_violation_absolute"
+            format_capacity_violation(issue)
+        elseif issue["type"] == "consecutive_impossible"
+            format_consecutive_impossible(issue)
+        else
+            "Day $(issue["day"]): Unknown issue type"
+        end
+        
+        push!(warnings, warning)
+    end
+    
+    # Generate suggestions
+    suggestions = generate_suggestions(issues)
+    
+    return Dict(
+        "title" => "Schedule Analysis",
+        "warnings" => warnings,
+        "suggestions" => suggestions
+    )
+end
+
+"""
+Format diagnostics for console/CLI output (backward compatibility)
+Converts structured diagnostic data back to text format
+"""
+function format_diagnostics_for_console(diagnostic_data::Dict)
+    lines = String[]
+    
+    # Title
+    push!(lines, diagnostic_data["title"])
+    push!(lines, "")
+    
+    # Warnings
+    for warning in diagnostic_data["warnings"]
+        push!(lines, warning)
+    end
+    
+    if !isempty(diagnostic_data["suggestions"])
+        push!(lines, "")
+        push!(lines, "💡 Suggestions:")
+        for suggestion in diagnostic_data["suggestions"]
+            push!(lines, suggestion)
+        end
+    end
+    
+    return lines
+end
+
+"""
+Format diagnostics for console/CLI output - handles both old and new format
+"""
+function format_diagnostics_for_console(diagnostics::Vector{String})
+    return diagnostics  # Already formatted
+end
+
+# ============================================================================
+# SCHEDULE DISPLAY FUNCTIONS
+# ============================================================================
+
+using DataFrames, Printf
+
 """
 Format count with day-off marker
 """

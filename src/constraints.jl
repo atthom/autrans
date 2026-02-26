@@ -80,32 +80,31 @@ end
 """
 Apply a hard constraint (no relaxation)
 Delegates to the soft constraint implementation with relaxation=0
+Returns objective_expression or nothing
 """
 function apply!(model, assign, scheduler::AutransScheduler, 
                 c::Constraint{Val{:HARD}}, N::Int, D::Int, T::Int)
     # Hard constraints are just soft constraints with relaxation=0
-    result = apply_constraint!(model, assign, scheduler, c.constraint, N, D, T, 0)
-    # Only return if it's a valid objective expression (not constraints)
-    return result isa Union{JuMP.AffExpr, JuMP.QuadExpr, Number} ? result : nothing
+    return apply_constraint!(model, assign, scheduler, c.constraint, N, D, T, 0, c.name)
 end
 
 """
 Apply a soft constraint (with relaxation)
+Returns objective_expression or nothing
 """
 function apply!(model, assign, scheduler::AutransScheduler, 
                 c::Constraint{Val{:SOFT}}, N::Int, D::Int, T::Int, relaxation::Int)
-    result = apply_constraint!(model, assign, scheduler, c.constraint, N, D, T, relaxation)
-    # Only return if it's a valid objective expression (not constraints)
-    return result isa Union{JuMP.AffExpr, JuMP.QuadExpr, Number} ? result : nothing
+    return apply_constraint!(model, assign, scheduler, c.constraint, N, D, T, relaxation, c.name)
 end
 
 """
 TaskCoverageConstraint implementation
 When relaxation=0: Each task has exactly the required number of workers (hard constraint)
 When relaxation>0: Tasks can be under-covered by up to 'relaxation' workers (soft constraint)
+Returns nothing
 """
 function apply_constraint!(model, assign, scheduler::AutransScheduler,
-                          c::TaskCoverageConstraint, N::Int, D::Int, T::Int, relaxation::Int)
+                          c::TaskCoverageConstraint, N::Int, D::Int, T::Int, relaxation::Int, constraint_name::String)
     for (t, task) in enumerate(scheduler.tasks)
         for d in 1:D
             if d in task.day_range
@@ -118,33 +117,45 @@ function apply_constraint!(model, assign, scheduler::AutransScheduler,
             end
         end
     end
+    
+    return nothing
 end
 
 """
 NoConsecutiveTasksConstraint implementation
-When relaxation=0: Workers do at most one task per day (hard constraint)
-When relaxation>0: Workers can do 1+relaxation tasks per day (soft constraint)
+When relaxation=0: Workers cannot do consecutive tasks (t and t+1) on the same day (hard constraint)
+When relaxation>0: Workers can do up to 'relaxation' pairs of consecutive tasks per day (soft constraint)
+Note: Workers CAN do multiple non-consecutive tasks on the same day
+Returns nothing
 """
 function apply_constraint!(model, assign, scheduler::AutransScheduler,
-                          c::NoConsecutiveTasksConstraint, N::Int, D::Int, T::Int, relaxation::Int)
-    max_tasks_per_day = 1 + relaxation
-    @constraint(model, [w=1:N, d=1:D], sum(assign[w, d, t] for t in 1:T) <= max_tasks_per_day)
+                          c::NoConsecutiveTasksConstraint, N::Int, D::Int, T::Int, relaxation::Int, constraint_name::String)
+    # Prevent workers from doing consecutive tasks (t and t+1) on the same day
+    for w in 1:N, d in 1:D
+        for t in 1:(T-1)
+            @constraint(model, assign[w, d, t] + assign[w, d, t+1] <= 1 + relaxation)
+        end
+    end
+    
+    return nothing
 end
 
 """
 DaysOffConstraint implementation
 When relaxation=0: Workers cannot work on their days off (hard constraint)
 When relaxation>0: Workers can work up to 'relaxation' tasks on days off (soft constraint)
+Returns nothing
 """
 function apply_constraint!(model, assign, scheduler::AutransScheduler,
-                          c::DaysOffConstraint, N::Int, D::Int, T::Int, relaxation::Int)
+                          c::DaysOffConstraint, N::Int, D::Int, T::Int, relaxation::Int, constraint_name::String)
     for (w, worker) in enumerate(scheduler.workers)
         days_off_list = [d for d in worker.days_off if 1 <= d <= D]
         if !isempty(days_off_list)
-            # Allow at most 'relaxation' tasks on days off
             @constraint(model, sum(assign[w, d, t] for d in days_off_list, t in 1:T) <= relaxation)
         end
     end
+    
+    return nothing
 end
 
 
@@ -154,44 +165,40 @@ When relaxation=0: Workers work exactly proportional to available days (hard con
 When relaxation>0: Workers work proportional with tolerance (soft constraint)
 Supports workload_offset: negative = work less, positive = work more (in difficulty points)
 Uses difficulty-weighted workload: workload = sum(tasks × difficulty)
+Returns nothing
 """
 function apply_constraint!(model, assign, scheduler::AutransScheduler{ProportionalEquity},
-                          c::OverallEquityConstraint, N::Int, D::Int, T::Int, relaxation::Int)
-    # Calculate total difficulty points needed
+                          c::OverallEquityConstraint, N::Int, D::Int, T::Int, relaxation::Int, constraint_name::String)
     total_difficulty = sum(task.num_workers * length(task.day_range) * task.difficulty 
                           for task in scheduler.tasks)
     available_worker_days = sum(D - length(worker.days_off ∩ Set(1:D)) 
                                for worker in scheduler.workers)
     
     if available_worker_days == 0
-        return
+        return nothing
     end
     
-    # Normalize workload offsets (offsets are in difficulty points)
     normalized_offsets = normalize_offsets(scheduler.workers)
     
     for (w, worker) in enumerate(scheduler.workers)
         work_days = [d for d in 1:D if d ∉ worker.days_off]
         if !isempty(work_days)
-            # Calculate base expected difficulty points
             expected_float = (length(work_days) / available_worker_days) * total_difficulty
             expected = round(Int, expected_float)
-            
-            # Apply normalized offset (in difficulty points)
             expected = expected + normalized_offsets[w]
-            expected = max(0, expected)  # Can't be negative
+            expected = max(0, expected)
             
-            # Tolerance: ±1 difficulty point (plus relaxation)
             lower = max(0, expected - 1 - relaxation)
             upper = expected + 1 + relaxation
             
-            # Constraint on difficulty-weighted workload
             @constraint(model, sum(assign[w, d, t] * scheduler.tasks[t].difficulty 
                                   for d in 1:D, t in 1:T) >= lower)
             @constraint(model, sum(assign[w, d, t] * scheduler.tasks[t].difficulty 
                                   for d in 1:D, t in 1:T) <= upper)
         end
     end
+    
+    return nothing
 end
 
 """
@@ -200,32 +207,29 @@ When relaxation=0: All workers work exactly the same amount (hard constraint, ±
 When relaxation>0: All workers work similar amounts with tolerance (soft constraint)
 Supports workload_offset: negative = work less, positive = work more (in difficulty points)
 Uses difficulty-weighted workload: workload = sum(tasks × difficulty)
+Returns nothing
 """
 function apply_constraint!(model, assign, scheduler::AutransScheduler{AbsoluteEquity},
-                          c::OverallEquityConstraint, N::Int, D::Int, T::Int, relaxation::Int)
-    # Calculate total difficulty points needed
+                          c::OverallEquityConstraint, N::Int, D::Int, T::Int, relaxation::Int, constraint_name::String)
     total_difficulty = sum(task.num_workers * length(task.day_range) * task.difficulty 
                           for task in scheduler.tasks)
     expected = div(total_difficulty, N)
-    
-    # Normalize workload offsets (offsets are in difficulty points)
     normalized_offsets = normalize_offsets(scheduler.workers)
     
     for (w, worker) in enumerate(scheduler.workers)
-        # Apply normalized offset (in difficulty points)
         adjusted_expected = expected + normalized_offsets[w]
-        adjusted_expected = max(0, adjusted_expected)  # Can't be negative
+        adjusted_expected = max(0, adjusted_expected)
         
-        # Tolerance: ±1 difficulty point (plus relaxation)
         lower = max(0, adjusted_expected - 1 - relaxation)
         upper = adjusted_expected + 1 + relaxation
         
-        # Constraint on difficulty-weighted workload
         @constraint(model, sum(assign[w, d, t] * scheduler.tasks[t].difficulty 
                               for d in 1:D, t in 1:T) >= lower)
         @constraint(model, sum(assign[w, d, t] * scheduler.tasks[t].difficulty 
                               for d in 1:D, t in 1:T) <= upper)
     end
+    
+    return nothing
 end
 
 
@@ -234,50 +238,54 @@ DailyEquityConstraint implementation
 When relaxation=0: Workers do similar amounts each day (hard constraint, ±1 difficulty point)
 When relaxation>0: Workers can do more per day with tolerance (soft constraint)
 Uses difficulty-weighted workload: daily workload = sum(tasks × difficulty)
+Returns nothing
 """
 function apply_constraint!(model, assign, scheduler::AutransScheduler,
-                          c::DailyEquityConstraint, N::Int, D::Int, T::Int, relaxation::Int)
-    # Calculate total difficulty points needed
+                          c::DailyEquityConstraint, N::Int, D::Int, T::Int, relaxation::Int, constraint_name::String)
     total_difficulty = sum(task.num_workers * length(task.day_range) * task.difficulty 
                           for task in scheduler.tasks)
     total_worker_days = sum(D - length(worker.days_off ∩ Set(1:D)) 
                            for worker in scheduler.workers)
     
     if total_worker_days == 0
-        return
+        return nothing
     end
     
-    # Average difficulty points per worker-day
     avg_difficulty_per_day = total_difficulty / total_worker_days
-    # Max daily difficulty: average + 1 (tolerance) + relaxation
     max_daily_difficulty = ceil(Int, avg_difficulty_per_day) + 1 + relaxation
     
     for (w, worker) in enumerate(scheduler.workers)
         work_days = [d for d in 1:D if d ∉ worker.days_off]
         for d in work_days
-            # Constraint on difficulty-weighted daily workload
             @constraint(model, sum(assign[w, d, t] * scheduler.tasks[t].difficulty 
                                   for t in 1:T) <= max_daily_difficulty)
         end
     end
+    
+    return nothing
 end
 
 """
 TaskDiversityConstraint implementation
 When relaxation=0: Each worker participates in each task fairly (hard constraint, ±1 for rounding)
 When relaxation>0: Workers can have uneven task participation with tolerance (soft constraint)
+Returns nothing
 """
 function apply_constraint!(model, assign, scheduler::AutransScheduler,
-                          c::TaskDiversityConstraint, N::Int, D::Int, T::Int, relaxation::Int)
+                          c::TaskDiversityConstraint, N::Int, D::Int, T::Int, relaxation::Int, constraint_name::String)
     for (t, task) in enumerate(scheduler.tasks)
         workload = length(task.day_range) * task.num_workers
         workload_per_worker = div(workload, N)
         lower = max(0, workload_per_worker - relaxation)
         upper = workload_per_worker + 1 + relaxation
         
-        @constraint(model, [w in 1:N], sum(assign[w, d, t] for d in 1:D) >= lower)
-        @constraint(model, [w in 1:N], sum(assign[w, d, t] for d in 1:D) <= upper)
+        for w in 1:N
+            @constraint(model, sum(assign[w, d, t] for d in 1:D) >= lower)
+            @constraint(model, sum(assign[w, d, t] for d in 1:D) <= upper)
+        end
     end
+    
+    return nothing
 end
 
 """
@@ -315,16 +323,13 @@ end
 WorkerPreferenceConstraint implementation
 When relaxation=0: Strong preference enforcement with high penalty (hard constraint)
 When relaxation>0: Moderate preference enforcement with lower penalty (soft constraint)
-Returns the penalty expression to be added to the objective function.
+Returns penalty_expression - this is an objective term, not constraints
 """
 function apply_constraint!(model, assign, scheduler::AutransScheduler,
-                          c::WorkerPreferenceConstraint, N::Int, D::Int, T::Int, relaxation::Int)
+                          c::WorkerPreferenceConstraint, N::Int, D::Int, T::Int, relaxation::Int, constraint_name::String)
     penalties = build_preference_penalties(scheduler, N, T)
-    
-    # Penalty weight depends on relaxation
-    # relaxation=0 (hard): high weight (10x)
-    # relaxation>0 (soft): lower weight, reduced by relaxation
     penalty_weight = ifelse(relaxation == 0, 10.0, max(0.1, 2.0 - relaxation * 0.3))
     
+    # This constraint returns an objective term to minimize
     return penalty_weight * sum(penalties[w, t] * assign[w, d, t] for w in 1:N, d in 1:D, t in 1:T)
 end

@@ -78,7 +78,7 @@ const TEST_SOFT_CONSTRAINTS = [
     end
     
     @testset "Impossible scenario (insufficient capacity)" begin
-        # Mathematically impossible scenario
+        # Mathematically impossible scenario - single task needs more workers than available
         workers = [
             AutransWorker("Person 1", Int[]),
             AutransWorker("Person 2", Int[]),
@@ -87,15 +87,11 @@ const TEST_SOFT_CONSTRAINTS = [
         ]
         
         tasks = [
-            AutransTask("Chore 1", 2, 1:7),
-            AutransTask("Chore 2", 2, 1:7),
-            AutransTask("Chore 3", 2, 1:7)
+            AutransTask("Chore 1", 5, 1:1)  # Needs 5 workers but only 4 available
         ]
         
-        # 4 workers, 3 tasks (2 workers each), 7 days
-        # Total slots needed: 3 × 2 × 7 = 42
-        # Available: 4 × 7 = 28 (150% utilization - IMPOSSIBLE)
-        # Each day needs 6 worker-slots but only 4 available
+        # 4 workers, 1 task needs 5 workers = IMPOSSIBLE
+        # This will be caught by pre-check (obvious infeasibility)
         
         scheduler = AutransScheduler(
             workers,

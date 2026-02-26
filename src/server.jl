@@ -145,41 +145,31 @@ end
 
 """
 Build detailed failure response from FailureInfo
+Returns raw data for UI to format as needed
 """
 function build_failure_response(failure_info)
     if failure_info === nothing
         return Dict(
             "error" => "No feasible schedule found",
-            "msg" => "Try adjusting constraints or adding more workers."
+            "msg" => "Schedule is not feasible",
+            "details" => Dict()
         )
     end
     
-    msg = "Schedule is not feasible.\n\n"
-    msg *= "Capacity Analysis:\n"
-    msg *= "- Total slots needed: $(failure_info.capacity_analysis["total_slots"])\n"
-    msg *= "- Available worker-days: $(failure_info.capacity_analysis["available_worker_days"])\n"
-    msg *= "- Utilization: $(failure_info.capacity_analysis["utilization_percent"])%\n"
-    
-    if !isempty(failure_info.capacity_analysis["daily_issues"])
-        msg *= "\nDaily Capacity Issues:\n"
-        for issue in failure_info.capacity_analysis["daily_issues"]
-            msg *= "- $issue\n"
-        end
-    end
-    
-    msg *= "\nFailed at relaxation level $(failure_info.level)\n"
-    msg *= "Constraint requirements that couldn't be satisfied:\n"
-    for detail in failure_info.constraint_details[1:min(5, length(failure_info.constraint_details))]
-        msg *= "- $detail\n"
-    end
-    
+    # Return raw data - let the UI handle all formatting
     return Dict(
-        "error" => msg,
-        "msg" => msg,
+        "error" => "Schedule is not feasible",
+        "msg" => "Schedule is not feasible",
         "details" => Dict(
-            "capacity" => failure_info.capacity_analysis,
-            "failed_level" => failure_info.level,
-            "constraints" => failure_info.constraint_details
+            "capacity" => Dict(
+                "total_slots" => failure_info.capacity_analysis["total_slots"],
+                "available_worker_days" => failure_info.capacity_analysis["available_worker_days"],
+                "daily_breakdown" => failure_info.capacity_analysis["daily_breakdown"],
+                "nb_days" => length(failure_info.capacity_analysis["daily_breakdown"])
+            ),
+            "conflict_analysis" => failure_info.conflict_analysis,
+            "constraints" => String[],  # Placeholder for future constraint tracking
+            "failed_level" => get(failure_info.capacity_analysis, "failed_level", nothing)
         )
     )
 end
