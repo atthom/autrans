@@ -60,6 +60,7 @@ struct OverallEquityConstraint <: AbstractConstraint end
 struct DailyEquityConstraint <: AbstractConstraint end
 struct TaskDiversityConstraint <: AbstractConstraint end
 struct WorkerPreferenceConstraint <: AbstractConstraint end
+struct OneTaskPerDayConstraint <: AbstractConstraint end
 
 """
 Constraint wrapper with HARD/SOFT designation using Val for type parameter

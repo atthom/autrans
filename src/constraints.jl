@@ -106,16 +106,13 @@ Returns nothing
 function apply_constraint!(model, assign, scheduler::AutransScheduler,
                           c::TaskCoverageConstraint, N::Int, D::Int, T::Int, relaxation::Int, constraint_name::String)
     for (t, task) in enumerate(scheduler.tasks)
-        for d in 1:D
-            if d in task.day_range
-                required = task.num_workers
-                min_workers = max(0, required - relaxation)
-                @constraint(model, sum(assign[w, d, t] for w in 1:N) >= min_workers)
-                @constraint(model, sum(assign[w, d, t] for w in 1:N) <= required)
-            else
-                @constraint(model, sum(assign[w, d, t] for w in 1:N) == 0)
-            end
-        end
+        required = task.num_workers
+        min_workers = max(0, required - relaxation)
+        outside_days = setdiff(1:D, task.day_range)
+        
+        @constraint(model, [d=task.day_range], sum(assign[w, d, t] for w in 1:N) >= min_workers)
+        @constraint(model, [d=task.day_range], sum(assign[w, d, t] for w in 1:N) <= required)
+        @constraint(model, [d=outside_days], sum(assign[w, d, t] for w in 1:N) == 0)
     end
     
     return nothing
@@ -131,11 +128,8 @@ Returns nothing
 function apply_constraint!(model, assign, scheduler::AutransScheduler,
                           c::NoConsecutiveTasksConstraint, N::Int, D::Int, T::Int, relaxation::Int, constraint_name::String)
     # Prevent workers from doing consecutive tasks (t and t+1) on the same day
-    for w in 1:N, d in 1:D
-        for t in 1:(T-1)
-            @constraint(model, assign[w, d, t] + assign[w, d, t+1] <= 1 + relaxation)
-        end
-    end
+
+    @constraint(model, [w=1:N, d=1:D, t=1:(T-1)], assign[w, d, t] + assign[w, d, t+1] <= 1 + relaxation)
     
     return nothing
 end
@@ -256,10 +250,9 @@ function apply_constraint!(model, assign, scheduler::AutransScheduler,
     
     for (w, worker) in enumerate(scheduler.workers)
         work_days = [d for d in 1:D if d ∉ worker.days_off]
-        for d in work_days
-            @constraint(model, sum(assign[w, d, t] * scheduler.tasks[t].difficulty 
-                                  for t in 1:T) <= max_daily_difficulty)
-        end
+        @constraint(model, [d=work_days], 
+            sum(assign[w, d, t] * scheduler.tasks[t].difficulty for t in 1:T) <= max_daily_difficulty
+        )
     end
     
     return nothing
@@ -332,4 +325,16 @@ function apply_constraint!(model, assign, scheduler::AutransScheduler,
     
     # This constraint returns an objective term to minimize
     return penalty_weight * sum(penalties[w, t] * assign[w, d, t] for w in 1:N, d in 1:D, t in 1:T)
+end
+
+"""
+OneTaskPerDayConstraint implementation
+When relaxation=0: Workers can do at most 1 task per day (hard constraint)
+When relaxation>0: Workers can do up to (1 + relaxation) tasks per day (soft constraint)
+Returns nothing
+"""
+function apply_constraint!(model, assign, scheduler::AutransScheduler,
+                          c::OneTaskPerDayConstraint, N::Int, D::Int, T::Int, relaxation::Int, constraint_name::String)
+    @constraint(model, [w in 1:N, d in 1:D], sum(assign[w, d, t] for t in 1:T) <= 1 + relaxation)
+    return nothing
 end

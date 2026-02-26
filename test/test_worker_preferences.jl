@@ -113,7 +113,7 @@ const TEST_SOFT_CONSTRAINTS = [
     end
     
     @testset "Mixed preferences scenario (infeasible)" begin
-        # Infeasible: 6 workers, 4 tasks (2 each), 7 days = 133% utilization
+        # Infeasible: Single task needs more workers than available
         workers = [
             AutransWorker("Worker 1", Int[], [1, 2, 3, 4]),
             AutransWorker("Worker 2", Int[], [2, 1, 4, 3]),
@@ -124,10 +124,10 @@ const TEST_SOFT_CONSTRAINTS = [
         ]
         
         tasks = [
-            AutransTask("Task 1", 2, 1:7),
-            AutransTask("Task 2", 2, 1:7),
-            AutransTask("Task 3", 2, 1:7),
-            AutransTask("Task 4", 2, 1:7)
+            AutransTask("Task 1", 7, 1:1),  # Needs 7 workers but only 6 available
+            AutransTask("Task 2", 2, 2:7),
+            AutransTask("Task 3", 2, 2:7),
+            AutransTask("Task 4", 2, 2:7)
         ]
         
         scheduler = AutransScheduler(
@@ -197,17 +197,17 @@ const TEST_SOFT_CONSTRAINTS = [
     end
     
     @testset "Preferences with days off (infeasible)" begin
-        # Infeasible: 4 workers with days off, 2 tasks, 5 days = 125% utilization
+        # Infeasible: Task needs more workers than available on a specific day
         workers = [
             AutransWorker("Worker 1", Set([1, 2]), [1, 2]),
-            AutransWorker("Worker 2", Set([3, 4]), [2, 1]),
-            AutransWorker("Worker 3", Set{Int}(), Int[]),
-            AutransWorker("Worker 4", Set{Int}(), Int[])
+            AutransWorker("Worker 2", Set([1, 2]), [2, 1]),  # Both have same days off
+            AutransWorker("Worker 3", Set([1, 2]), Int[]),
+            AutransWorker("Worker 4", Set([1, 2]), Int[])
         ]
         
         tasks = [
-            AutransTask("Task 1", 2, 1:5),
-            AutransTask("Task 2", 2, 1:5)
+            AutransTask("Task 1", 3, 1:1),  # Needs 3 workers on day 1, but everyone is off
+            AutransTask("Task 2", 2, 3:5)
         ]
         
         scheduler = AutransScheduler(
