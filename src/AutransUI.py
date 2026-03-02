@@ -737,8 +737,9 @@ with settings:
                 {"name": "Days Off", "enabled": True, "type": "hard", "description": "Workers cannot work on their days off"},
                 {"name": "Overall Equity", "enabled": True, "type": "soft", "description": "Fair distribution of total workload"},
                 {"name": "Daily Equity", "enabled": True, "type": "soft", "description": "Similar amount of work per day"},
-                  {"name": "Task Diversity", "enabled": True, "type": "soft", "description": "Everyone participates in each task"},
-                {"name": "Worker Preference", "enabled": False, "type": "soft", "description": "Respect worker task preferences (requires preferences enabled)"}
+                {"name": "Task Diversity", "enabled": True, "type": "soft", "description": "Everyone participates in each task"},
+                {"name": "Worker Preference", "enabled": False, "type": "soft", "description": "Respect worker task preferences (requires preferences enabled)"},
+                {"name": "One Task Per Day", "enabled": False, "type": "hard", "description": "Workers can do at most 1 task per day (stricter than No Consecutive Tasks)"}
             ]
         
         st.markdown("#### Constraints")
@@ -903,7 +904,8 @@ if submit:
         "Overall Equity": "OverallEquity",
         "Daily Equity": "DailyEquity",
         "Task Diversity": "TaskDiversity",
-        "Worker Preference": "WorkerPreference"
+        "Worker Preference": "WorkerPreference",
+        "One Task Per Day": "OneTaskPerDay"
     }
     
     # Extract enabled constraints from unified list
@@ -944,6 +946,7 @@ if submit:
         st.session_state['grid_data'] = all_agg["display"]
         st.session_state['time_data'] = all_agg["time"]
         st.session_state['jobs_data'] = all_agg["jobs"]
+        st.session_state['capacity_data'] = all_agg.get("capacity_analysis", {})
         
         # Store export payload for later use
         st.session_state['export_workers'] = workers
@@ -986,6 +989,54 @@ with tables:
         if 'grid_data' in st.session_state:
             set_df(schedule_grid, st.session_state['grid_data'])
     with tabs[2]:
+        # Display Global Metrics if capacity data is available
+        if 'capacity_data' in st.session_state and st.session_state['capacity_data']:
+            capacity = st.session_state['capacity_data']
+            st.markdown("### 📊 Global Metrics")
+            col1, col2, col3, col4, col5 = st.columns(5)
+            col1.metric("Days", capacity.get("num_days", "N/A"))
+            col2.metric("Workers", capacity.get("num_workers", "N/A"))
+            col3.metric("Tasks", capacity.get("num_tasks", "N/A"))
+            col4.metric("Task Slots", capacity.get("total_slots", "N/A"))
+            col5.metric("Utilization", f"{capacity.get('utilization_percent', 0)}%")
+            st.markdown("---")
+        
+        # Display Day by Day Breakdown if available
+        if 'capacity_data' in st.session_state and st.session_state['capacity_data']:
+            capacity = st.session_state['capacity_data']
+            if capacity.get("daily_breakdown"):
+                st.markdown("### 📅 Day by Day Breakdown")
+                # Create table data
+                table_data = []
+                for day_info in capacity["daily_breakdown"]:
+                    day = day_info.get("day", "?")
+                    slots = day_info.get("slots_needed", "?")
+                    workers_avail = day_info.get("workers_available", "?")
+                    
+                    # Get workers on day off for this day
+                    workers_off = day_info.get("workers_off", [])
+                    workers_off_str = ", ".join(workers_off) if workers_off else "-"
+                    
+                    table_data.append({
+                        "Day": day,
+                        "Task Slots": slots,
+                        "Workers Available": workers_avail,
+                        "Workers Unavailable": workers_off_str
+                    })
+                
+                # Display as DataFrame table with centered styling
+                df_breakdown = pd.DataFrame(table_data)
+                
+                # Style the dataframe to center all content
+                styled_df = df_breakdown.style.set_properties(**{
+                    'text-align': 'center'
+                }).set_table_styles([
+                    {'selector': 'th', 'props': [('text-align', 'center')]}
+                ])
+                
+                st.dataframe(styled_df, use_container_width=True, hide_index=True)
+                st.markdown("---")
+        
         schedule_grid_audit = make_table("Schedule", ["Tasks"] + selected_days)
         if 'grid_data' in st.session_state:
             set_df(schedule_grid_audit, st.session_state['grid_data'])
