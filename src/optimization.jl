@@ -25,10 +25,13 @@ function analyze_capacity(scheduler::AutransScheduler, N, D, T)
     for d in 1:D
         slots_needed = sum(task.num_workers for task in scheduler.tasks if d in task.day_range; init=0)
         workers_available = count(w -> d ∉ w.days_off, scheduler.workers)
+        # Get names of workers who are off on this day
+        workers_off = [w.name for w in scheduler.workers if d in w.days_off]
         push!(daily_breakdown, Dict(
             "day" => d,
             "slots_needed" => slots_needed,
-            "workers_available" => workers_available
+            "workers_available" => workers_available,
+            "workers_off" => workers_off
         ))
     end
     

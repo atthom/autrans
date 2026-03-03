@@ -353,6 +353,12 @@ end
         return json(failure_dict, status=400)
     end
     
+    # Analyze capacity for successful schedules
+    N = length(scheduler.workers)
+    D = scheduler.num_days
+    T = length(scheduler.tasks)
+    capacity_analysis = Autrans.analyze_capacity(scheduler, N, D, T)
+    
     # Generate all three views
     display_data = schedule_to_display(result, scheduler)
     time_data = schedule_to_time_agg(result, scheduler)
@@ -361,7 +367,8 @@ end
     return json(Dict(
         "display" => display_data,
         "time" => time_data,
-        "jobs" => jobs_data
+        "jobs" => jobs_data,
+        "capacity_analysis" => capacity_analysis
     ))
 end
 

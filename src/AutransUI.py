@@ -960,6 +960,26 @@ if submit:
         st.success("✅ Schedule generated successfully! Click the **Schedule** tab above to view it.", icon="🎉")
     else:
         # Failure - schedule is infeasible
+        # Clear old schedule data from session state
+        if 'schedule_df' in st.session_state:
+            del st.session_state['schedule_df']
+        if 'schedule_colors' in st.session_state:
+            del st.session_state['schedule_colors']
+        if 'grid_data' in st.session_state:
+            del st.session_state['grid_data']
+        if 'time_data' in st.session_state:
+            del st.session_state['time_data']
+        if 'jobs_data' in st.session_state:
+            del st.session_state['jobs_data']
+        if 'capacity_data' in st.session_state:
+            del st.session_state['capacity_data']
+        if 'export_workers' in st.session_state:
+            del st.session_state['export_workers']
+        if 'export_tasks' in st.session_state:
+            del st.session_state['export_tasks']
+        if 'export_balance' in st.session_state:
+            del st.session_state['export_balance']
+        
         failure_response = res.json()
         # Pass detailed diagnostics if available
         details = failure_response.get("details", None)
