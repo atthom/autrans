@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 from streamlit_tags import st_tags, st_tags_sidebar
 import pandas as pd
 import numpy as np
@@ -154,19 +155,54 @@ def sat_schedule(txt, details=None, tasks=None, workers=None, nb_days=None, hard
 def setting_error(txt):
     h3_button(txt)
 
-def set_df(layout, payload, cols=[], colors=None):
+def set_df(layout, payload, cols=[], colors=None, use_table=True):
     data = np.array(payload["columns"]).T
     df = pd.DataFrame(data, columns=payload["colindex"]["names"])
     if cols != []:
         df.columns = cols
-    if colors:
-        def color_row(row):
-            color = colors[row.name] if row.name < len(colors) else 'white'
-            return [f'background-color: {color}'] * len(row)
-        styled_df = df.style.apply(color_row, axis=1)
-        layout.dataframe(styled_df, use_container_width=True, hide_index=True)
+    
+    if use_table:
+        # Use st.table for schedule grid (with text wrapping for worker cells)
+        if colors:
+            def color_row(row):
+                color = colors[row.name] if row.name < len(colors) else 'white'
+                return [f'background-color: {color}'] * len(row)
+            
+            # Apply different styles: wider first column (task names), normal wrapping for others
+            def style_columns(styler):
+                styler = styler.apply(color_row, axis=1)
+                # First column (Tasks) should be wider and not wrap
+                styler = styler.set_properties(subset=[df.columns[0]], **{
+                    'white-space': 'nowrap',
+                    'min-width': '300px',
+                    'width': '300px',
+                    'font-weight': 'bold'
+                })
+                # Other columns (worker cells) should wrap
+                styler = styler.set_properties(subset=df.columns[1:], **{
+                    'white-space': 'normal',
+                    'word-wrap': 'break-word'
+                })
+                return styler
+            
+            styled_df = style_columns(df.style)
+            layout.table(styled_df)
+        else:
+            styled_df = df.style.set_properties(**{
+                'white-space': 'normal',
+                'word-wrap': 'break-word'
+            })
+            layout.table(styled_df)
     else:
-        layout.dataframe(df, use_container_width=True, hide_index=True)
+        # Use st.dataframe for audit tables (no special styling needed)
+        if colors:
+            def color_row(row):
+                color = colors[row.name] if row.name < len(colors) else 'white'
+                return [f'background-color: {color}'] * len(row)
+            styled_df = df.style.apply(color_row, axis=1)
+            layout.dataframe(styled_df, use_container_width=True, hide_index=True)
+        else:
+            layout.dataframe(df, use_container_width=True, hide_index=True)
 
 def make_table(title, columns):
     st.subheader(title)
@@ -179,7 +215,7 @@ def make_schedule(placeholder, df, colors):
         # colors is list of colors for each chore
         st.markdown("""
         <div style="background-color: rgb(16, 185, 129); padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
-            <h2 style="color: white; margin: 0;">Schedule</h2>
+            <h2 style="color: white; margin: 0;">Daily Schedule</h2>
         </div>
         """, unsafe_allow_html=True)
 
@@ -229,9 +265,29 @@ def display_chore(chore_name, nb_worker, difficulty, color, i, with_range=False)
                         key=f"del_chore_{i}", use_container_width=True,
                         on_click=del_chore, args=[i])
     if with_range:
-        chore_start, chore_end = st.slider("chore range", 0, len(selected_days)-1, (0, len(selected_days)-1), key=f"chore_range_{i}", label_visibility="collapsed")
+        chore_start, chore_end = st.slider("chore range", 1, len(selected_days), (1, len(selected_days)), key=f"chore_range_{i}", label_visibility="collapsed", format="day %f")
+        components.html("""
+            <script>
+                const observer = new MutationObserver(() => {
+                    const labelsMax = window.parent.document.querySelectorAll('[data-testid="stSliderTickBarMax"]');
+                    const labelsMin = window.parent.document.querySelectorAll('[data-testid="stSliderTickBarMin"]');
+                    
+                    if (labelsMax.length > 0) {
+                        labelsMax.forEach(label => {
+                            label.innerText = "";
+                        });
+                        labelsMin.forEach(label => {
+                            label.innerText = "";
+                        });
+                    }
+                    observer.disconnect();
+                });
+                
+                observer.observe(window.parent.document.body, { childList: true, subtree: true });
+            </script>
+        """, height=1)
     else:
-        chore_start, chore_end = 0, len(selected_days)-1
+        chore_start, chore_end = 1, len(selected_days)
     return chore_name_i, nb_worker_i, difficulty_i, color_i, chore_start, chore_end
 
 def display_worker(worker_name, worker_days_off, i, task_names):
@@ -350,7 +406,7 @@ def add_chore():
     
     i = len(st.session_state['chores'])
     color = generate_pastel_color()
-    st.session_state['chores'].append((f"Chore {i+1}", 2, 1, 0, st.session_state["nb_days"] - 1, color))
+    st.session_state['chores'].append((f"Chore {i+1}", 2, 1, 1, st.session_state["nb_days"], color))
 
 def add_worker(): 
     print("add_worker")
@@ -713,16 +769,13 @@ settings, tables = st.columns([4, 8])
 
 weekdays = ["Monday", "Tuesday" , "Wednesday", "Thursday" , "Friday", "Saturday", "Sunday"]
 with settings:
-    with st.container(border=True):
-        st.markdown("### ⚙️ General Settings")
+    with st.expander("⚙️ General Settings", expanded=True):
         nb_days, selected_days = display_general_settings()
     
-    with st.container(border=True):
-        st.markdown("### 📋 Tasks")
+    with st.expander("📋 Tasks", expanded=True):
         chore_per_day = display_chores_section()
     
-    with st.container(border=True):
-        st.markdown("### 👥 Workers")
+    with st.expander("👥 Workers", expanded=True):
         balance_daysoff = display_worker_section()
     
     workers, _ = zip(*st.session_state["workers"])
@@ -824,19 +877,19 @@ with settings:
             else:
                 cols[2].empty()
 
-    with st.expander("💾 State Management", expanded=True):
+    with st.expander("💾 State Management", expanded=False):
+        st.markdown("**Save your configuration** to share with others or restore later")
+        
         # Generate State button
-        st.text("")
-        if st.button("Generate State", type="primary", key="save_state", use_container_width=True):
+        if st.button("Generate State Code", type="secondary", key="save_state", use_container_width=True):
             on_save_state()
         
         # Show state with copy button if it exists
         if 'saved_state_string' in st.session_state:
             st.code(st.session_state['saved_state_string'], language=None)
-            st.caption("✅ Click the copy button above to copy your state code")
-        st.text("")
+            
+        st.markdown("**Load a previously saved configuration**")
         
-        # Load State section
         row4 = st.text_input("Paste state code to load", label_visibility="collapsed", placeholder="Paste state code here...")
         
         if st.button("Load State", type="secondary", key="load_state", use_container_width=True):
@@ -865,8 +918,8 @@ if submit:
         #start = selected_days.index(name_start) +1
         #end = selected_days.index(name_end) +1
         
-        start = name_start + 1
-        end = name_end + 1
+        start = name_start
+        end = name_end
         
         all_tasks.append((chore_name, nb_people, difficulty, start, end))
 
@@ -939,6 +992,8 @@ if submit:
         colors = [color for _, _, _, _, _, color in st.session_state['chores']]
         payload_sched = all_agg["display"]
         data = np.array(payload_sched["columns"]).T
+
+        
         df = pd.DataFrame(data, columns=payload_sched["colindex"]["names"])
         st.session_state['schedule_df'] = df
         st.session_state['schedule_colors'] = colors
@@ -996,107 +1051,154 @@ if submit:
 
 with tables:
     with st.container(border=True):
-        tabs = st.tabs(["Schedule", "Grid", "Audit", "Export", "Help"])
+        tabs = st.tabs(["Table Schedule", "Daily Schedule", "Audit", "Export", "Help"])
     
     with tabs[0]:
-        schedule_placeholder = st.empty()
-        if 'schedule_df' in st.session_state:
-            make_schedule(schedule_placeholder, st.session_state['schedule_df'], st.session_state['schedule_colors'])
-        else:
-            schedule_placeholder.markdown("Your schedule is here")
-    with tabs[1]:
-        schedule_grid = make_table("Schedule", ["Tasks"] + selected_days)
-        if 'grid_data' in st.session_state:
-            set_df(schedule_grid, st.session_state['grid_data'])
-    with tabs[2]:
-        # Display Global Metrics if capacity data is available
-        if 'capacity_data' in st.session_state and st.session_state['capacity_data']:
-            capacity = st.session_state['capacity_data']
-            st.markdown("### 📊 Global Metrics")
-            col1, col2, col3, col4, col5 = st.columns(5)
-            col1.metric("Days", capacity.get("num_days", "N/A"))
-            col2.metric("Workers", capacity.get("num_workers", "N/A"))
-            col3.metric("Tasks", capacity.get("num_tasks", "N/A"))
-            col4.metric("Task Slots", capacity.get("total_slots", "N/A"))
-            col5.metric("Utilization", f"{capacity.get('utilization_percent', 0)}%")
-            st.markdown("---")
-        
-        # Display Day by Day Breakdown if available
-        if 'capacity_data' in st.session_state and st.session_state['capacity_data']:
-            capacity = st.session_state['capacity_data']
-            if capacity.get("daily_breakdown"):
-                st.markdown("### 📅 Day by Day Breakdown")
-                # Create table data
-                table_data = []
-                for day_info in capacity["daily_breakdown"]:
-                    day = day_info.get("day", "?")
-                    slots = day_info.get("slots_needed", "?")
-                    workers_avail = day_info.get("workers_available", "?")
-                    
-                    # Get workers on day off for this day
-                    workers_off = day_info.get("workers_off", [])
-                    workers_off_str = ", ".join(workers_off) if workers_off else "-"
-                    
-                    table_data.append({
-                        "Day": day,
-                        "Task Slots": slots,
-                        "Workers Available": workers_avail,
-                        "Workers Unavailable": workers_off_str
-                    })
-                
-                # Display as DataFrame table with centered styling
-                df_breakdown = pd.DataFrame(table_data)
-                
-                # Style the dataframe to center all content
-                styled_df = df_breakdown.style.set_properties(**{
-                    'text-align': 'center'
-                }).set_table_styles([
-                    {'selector': 'th', 'props': [('text-align', 'center')]}
-                ])
-                
-                st.dataframe(styled_df, use_container_width=True, hide_index=True)
-                st.markdown("---")
-        
-        schedule_grid_audit = make_table("Schedule", ["Tasks"] + selected_days)
-        if 'grid_data' in st.session_state:
-            set_df(schedule_grid_audit, st.session_state['grid_data'])
-        task_agg = make_table("Affectation per day", ["Days"] + workers)
-        if 'time_data' in st.session_state:
-            set_df(task_agg, st.session_state['time_data'])
-        task_per_day_agg = make_table("Affectation per task", ["Tasks"] + workers)
-        if 'jobs_data' in st.session_state:
-            set_df(task_per_day_agg, st.session_state['jobs_data'])
-        
-        # Add legend
-        st.markdown("---")
-        st.markdown("### 📖 Legend")
         st.markdown("""
-        **Understanding the Audit Tables:**
-        
-        - **Schedule**: Shows which workers are assigned to each task on each day
-        - **Affectation per day**: Shows how many tasks each worker does per day (and total difficulty points)
-        - **Affectation per task**: Shows how many times each worker does each task (and total difficulty points)
-        
-        **Notation:**
-        - **\\*** (asterisk) = Worker had a day off on that day/task period
-        - Numbers with \\* indicate work done despite having days off in that period
-        - **Format**: `count (difficulty pts)` - Shows both task count and total difficulty points
-        - **Example**: `3 (7 pts)` means 3 tasks with a combined difficulty of 7 points
-        - TOTAL row/column shows the sum across all days/tasks
-        
-        **Task Difficulty:**
-        - Each task has a difficulty value (default: 1)
-        - Higher difficulty = more challenging/time-consuming task
-        - Workload is balanced by difficulty points, not just task count
-        - Example: 2 easy tasks (2 pts) ≈ 1 hard task (2 pts)
-        """)
-    with tabs[3]:
+        <div style="background-color: rgb(16, 185, 129); padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
+            <h2 style="color: white; margin: 0;">Table Schedule</h2>
+        </div>
+        """, unsafe_allow_html=True)
         if 'grid_data' in st.session_state:
+            schedule_grid = st.empty()
+            set_df(schedule_grid, st.session_state['grid_data'], use_table=False)
+        else:
+            st.info("📋 Generate a schedule first to view the table schedule")
+    with tabs[1]:
+        st.markdown("""
+        <div style="background-color: rgb(16, 185, 129); padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
+            <h2 style="color: white; margin: 0;">Daily Schedule</h2>
+        </div>
+        """, unsafe_allow_html=True)
+        if 'schedule_df' in st.session_state:
+            schedule_placeholder = st.empty()
+            # Show the schedule content (dates and tasks)
+            start_date = st.session_state["start_date"]
+            dates = [start_date + datetime.timedelta(days=i) for i in range(st.session_state["nb_days"])]
+            df = st.session_state['schedule_df']
+            colors = st.session_state['schedule_colors']
+            
+            for j, day in enumerate(selected_days):
+                date_str = dates[j].strftime('%d/%m/%Y')
+                with st.container():
+                    st.markdown(f"<h4 style='color: rgb(16, 185, 129);'>{date_str} - {day} - Day {j+1}</h4>", unsafe_allow_html=True)
+                    
+                    for i in range(len(df)):
+                        chore_name = df.iloc[i, 0]
+                        assignments = df.iloc[i, j+1]
+                        if assignments and str(assignments).strip():
+                            color = colors[i] if i < len(colors) else 'white'
+                            names_list = str(assignments).split(', ')
+                            names_html = '<br>'.join(names_list)
+                            card_html = f"""
+                            <div style="background-color: {color}; padding: 10px; margin: 5px 0; border-radius: 8px; border: 1px solid #ddd; padding-left: 20px;">
+                                <strong>{chore_name}</strong><br>
+                                {names_html}
+                            </div>
+                            """
+                            st.markdown(card_html, unsafe_allow_html=True)
+        else:
+            st.info("📅 Generate a schedule first to view the daily schedule")
+    with tabs[2]:
+        st.markdown("""
+        <div style="background-color: rgb(16, 185, 129); padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
+            <h2 style="color: white; margin: 0;">Audit</h2>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if 'grid_data' in st.session_state:
+            
+            # Display Global Metrics if capacity data is available
+            if 'capacity_data' in st.session_state and st.session_state['capacity_data']:
+                capacity = st.session_state['capacity_data']
+                st.markdown("### 📊 Global Metrics")
+                col1, col2, col3, col4, col5 = st.columns(5)
+                col1.metric("Days", capacity.get("num_days", "N/A"))
+                col2.metric("Workers", capacity.get("num_workers", "N/A"))
+                col3.metric("Tasks", capacity.get("num_tasks", "N/A"))
+                col4.metric("Task Slots", capacity.get("total_slots", "N/A"))
+                col5.metric("Utilization", f"{capacity.get('utilization_percent', 0)}%")
+                st.markdown("---")
+            
+            # Display Day by Day Breakdown if available
+            if 'capacity_data' in st.session_state and st.session_state['capacity_data']:
+                capacity = st.session_state['capacity_data']
+                if capacity.get("daily_breakdown"):
+                    st.markdown("### 📅 Day by Day Breakdown")
+                    # Create table data
+                    table_data = []
+                    for day_info in capacity["daily_breakdown"]:
+                        day = day_info.get("day", "?")
+                        slots = day_info.get("slots_needed", "?")
+                        workers_avail = day_info.get("workers_available", "?")
+                        
+                        # Get workers on day off for this day
+                        workers_off = day_info.get("workers_off", [])
+                        workers_off_str = ", ".join(workers_off) if workers_off else "-"
+                        
+                        table_data.append({
+                            "Day": day,
+                            "Task Slots": slots,
+                            "Workers Available": workers_avail,
+                            "Workers Unavailable": workers_off_str
+                        })
+                    
+                    # Display as DataFrame table with centered styling
+                    df_breakdown = pd.DataFrame(table_data)
+                    
+                    # Style the dataframe to center all content
+                    styled_df = df_breakdown.style.set_properties(**{
+                        'text-align': 'center'
+                    }).set_table_styles([
+                        {'selector': 'th', 'props': [('text-align', 'center')]}
+                    ])
+                    
+                    st.dataframe(styled_df, use_container_width=True, hide_index=True)
+                    st.markdown("---")
+            
+            schedule_grid_audit = make_table("Schedule", ["Tasks"] + selected_days)
+            if 'grid_data' in st.session_state:
+                set_df(schedule_grid_audit, st.session_state['grid_data'], use_table=False)
+            task_agg = make_table("Affectation per day", ["Days"] + workers)
+            if 'time_data' in st.session_state:
+                set_df(task_agg, st.session_state['time_data'], use_table=False)
+            task_per_day_agg = make_table("Affectation per task", ["Tasks"] + workers)
+            if 'jobs_data' in st.session_state:
+                set_df(task_per_day_agg, st.session_state['jobs_data'], use_table=False)
+            
+            # Add legend
+            st.markdown("---")
+            st.markdown("### 📖 Legend")
             st.markdown("""
-            <div style="background-color: rgb(16, 185, 129); padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
-                <h2 style="color: white; margin: 0;">📥 Export Your Schedule</h2>
-            </div>
-            """, unsafe_allow_html=True)
+            **Understanding the Audit Tables:**
+            
+            - **Schedule**: Shows which workers are assigned to each task on each day
+            - **Affectation per day**: Shows how many tasks each worker does per day (and total difficulty points)
+            - **Affectation per task**: Shows how many times each worker does each task (and total difficulty points)
+            
+            **Notation:**
+            - **\\*** (asterisk) = Worker had a day off on that day/task period
+            - Numbers with \\* indicate work done despite having days off in that period
+            - **Format**: `count (difficulty pts)` - Shows both task count and total difficulty points
+            - **Example**: `3 (7 pts)` means 3 tasks with a combined difficulty of 7 points
+            - TOTAL row/column shows the sum across all days/tasks
+            
+            **Task Difficulty:**
+            - Each task has a difficulty value (default: 1)
+            - Higher difficulty = more challenging/time-consuming task
+            - Workload is balanced by difficulty points, not just task count
+            - Example: 2 easy tasks (2 pts) ≈ 1 hard task (2 pts)
+            """)
+        else:
+            st.info("📊 Generate a schedule first to view the audit information")
+    with tabs[3]:
+        st.markdown("""
+        <div style="background-color: rgb(16, 185, 129); padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
+            <h2 style="color: white; margin: 0;">📥 Export Your Schedule</h2>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if 'grid_data' in st.session_state:
             
             st.markdown("### Choose your export format:")
             st.markdown("")
