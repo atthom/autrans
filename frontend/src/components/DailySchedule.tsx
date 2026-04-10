@@ -1,5 +1,5 @@
 import React from 'react';
-import { generateDateRange, getDayName, getFormattedDate, getDayLabel } from '../utils/helpers';
+import { generateDateRange, getFormattedDate, getDayLabel } from '../utils/helpers';
 import { parseTableData } from '../utils/helpers';
 import type { ScheduleResponse } from '../types';
 
@@ -35,7 +35,7 @@ export const DailySchedule: React.FC<DailyScheduleProps> = ({
 
         return (
           <div key={dayIndex} className={`border-b pb-6 last:border-b-0 ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-            <h3 className={`text-xl font-semibold mb-4 ${isDarkMode ? 'text-accent-400' : 'text-accent-600'}`}>
+            <h3 className={`text-xl font-semibold mb-4 ${isDarkMode ? 'text-primary-400' : 'text-primary-600'}`}>
               {dateStr} - {displayLabel}
             </h3>
 

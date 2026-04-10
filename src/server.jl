@@ -526,31 +526,73 @@ end
     )
 end
 
-# GET / - Health check endpoint
+# Static file serving for production frontend
+const FRONTEND_DIST = joinpath(@__DIR__, "..", "frontend", "dist")
+
+# Serve static assets (JS, CSS, images, etc.)
+@get "/assets/*" function(req::HTTP.Request)
+    # Extract the path after /assets/
+    path = req.target[9:end]  # Remove "/assets/" prefix
+    filepath = joinpath(FRONTEND_DIST, "assets", path)
+    
+    if isfile(filepath)
+        # Determine content type based on file extension
+        ext = splitext(filepath)[2]
+        content_type = if ext == ".js"
+            "application/javascript"
+        elseif ext == ".css"
+            "text/css"
+        elseif ext == ".svg"
+            "image/svg+xml"
+        elseif ext == ".png"
+            "image/png"
+        elseif ext == ".jpg" || ext == ".jpeg"
+            "image/jpeg"
+        else
+            "application/octet-stream"
+        end
+        
+        return HTTP.Response(200, ["Content-Type" => content_type], body=read(filepath))
+    else
+        return HTTP.Response(404, body="File not found")
+    end
+end
+
+# Serve favicon
+@get "/favicon.svg" function()
+    filepath = joinpath(FRONTEND_DIST, "favicon.svg")
+    if isfile(filepath)
+        return HTTP.Response(200, ["Content-Type" => "image/svg+xml"], body=read(filepath))
+    else
+        return HTTP.Response(404, body="Favicon not found")
+    end
+end
+
+# Serve index.html for root path
 @get "/" function()
-    return json(Dict(
-        "service" => "Autrans API",
-        "version" => "0.1.0",
-        "status" => "running",
-        "endpoints" => Dict(
-            "POST /sat" => "Check if a schedule is feasible (SAT check)",
-            "POST /schedule" => "Generate a complete schedule with all views",
-            "POST /export/ics" => "Export schedule as iCalendar (.ics) file",
-            "POST /export/csv" => "Export schedule as CSV file"
-        ),
-        "export_formats" => Dict(
-            "ics" => Dict(
-                "description" => "iCalendar format for calendar applications",
-                "compatible_with" => ["Microsoft Outlook", "Google Calendar", "Apple Calendar"],
-                "filename_format" => "Schedule-{trip_name}-{start_date}-{duration}days.ics"
-            ),
-            "csv" => Dict(
-                "description" => "CSV format for spreadsheet applications",
-                "compatible_with" => ["Microsoft Excel", "Google Sheets", "LibreOffice Calc"],
-                "filename_format" => "Schedule-{trip_name}-{start_date}-{duration}days.csv"
-            )
-        )
-    ))
+    filepath = joinpath(FRONTEND_DIST, "index.html")
+    if isfile(filepath)
+        return HTTP.Response(200, ["Content-Type" => "text/html"], body=read(filepath))
+    else
+        return HTTP.Response(404, body="Frontend not built. Run: cd frontend && npm run build")
+    end
+end
+
+# Serve index.html for any other routes (SPA fallback)
+@get "/*" function(req::HTTP.Request)
+    # If it's an API route, let it pass through
+    if startswith(req.target, "/sat") || startswith(req.target, "/schedule") || 
+       startswith(req.target, "/export")
+        return HTTP.Response(404, body="API endpoint not found")
+    end
+    
+    # Serve index.html for all other routes (SPA routing)
+    filepath = joinpath(FRONTEND_DIST, "index.html")
+    if isfile(filepath)
+        return HTTP.Response(200, ["Content-Type" => "text/html"], body=read(filepath))
+    else
+        return HTTP.Response(404, body="Frontend not built. Run: cd frontend && npm run build")
+    end
 end
 
 """

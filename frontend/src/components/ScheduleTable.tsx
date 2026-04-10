@@ -3,7 +3,6 @@ import {
   useReactTable,
   getCoreRowModel,
   flexRender,
-  createColumnHelper,
   type ColumnDef,
 } from '@tanstack/react-table';
 import { parseTableData, getDayLabel } from '../utils/helpers';
@@ -50,7 +49,7 @@ export const ScheduleTable: React.FC<ScheduleTableProps> = ({
 
   // Transform data for TanStack Table
   const data = useMemo(() => {
-    return rows.map((row, index) => {
+    return rows.map((row) => {
       const rowData: ScheduleRow = { task: row[0] || '' };
       headers.slice(1).forEach((header, i) => {
         rowData[header] = row[i + 1] || '';

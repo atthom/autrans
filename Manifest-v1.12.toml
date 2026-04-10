@@ -2,14 +2,14 @@
 
 julia_version = "1.12.4"
 manifest_format = "2.0"
-project_hash = "55c8f431a97c98302356584c5778353e12292383"
+project_hash = "9b0955202f5d7157eb35d80db821e0899806512f"
 
 [[deps.Artifacts]]
 uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
 version = "1.11.0"
 
 [[deps.Autrans]]
-deps = ["DataFrames", "HTTP", "HiGHS", "JSON3", "JuMP", "MathOptIIS", "Oxygen", "Printf"]
+deps = ["DataFrames", "HTTP", "HiGHS", "JSON3", "JuMP", "Oxygen", "Printf"]
 path = "."
 uuid = "1f02543f-5e56-4038-b276-ee84bbffedc8"
 version = "0.1.0"

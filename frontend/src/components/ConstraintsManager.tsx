@@ -39,14 +39,12 @@ const CONSTRAINT_DESCRIPTIONS: Record<string, string> = {
 
 interface SortableConstraintItemProps {
   constraint: Constraint;
-  index: number;
   onStatusChange: (status: 'Hard' | 'Soft' | 'Off') => void;
   isDarkMode: boolean;
 }
 
 const SortableConstraintItem: React.FC<SortableConstraintItemProps> = ({
   constraint,
-  index,
   onStatusChange,
   isDarkMode,
 }) => {
@@ -313,18 +311,14 @@ export const ConstraintsManager: React.FC<ConstraintsManagerProps> = ({
               strategy={verticalListSortingStrategy}
             >
               <div className="space-y-2">
-                {softConstraints.map((constraint) => {
-                  const index = constraints.findIndex(c => c.name === constraint.name);
-                  return (
-                    <SortableConstraintItem
-                      key={constraint.name}
-                      constraint={constraint}
-                      index={index}
-                      onStatusChange={(status) => handleStatusChange(constraint.name, status)}
-                      isDarkMode={isDarkMode}
-                    />
-                  );
-                })}
+                {softConstraints.map((constraint) => (
+                  <SortableConstraintItem
+                    key={constraint.name}
+                    constraint={constraint}
+                    onStatusChange={(status) => handleStatusChange(constraint.name, status)}
+                    isDarkMode={isDarkMode}
+                  />
+                ))}
               </div>
             </SortableContext>
           </DndContext>

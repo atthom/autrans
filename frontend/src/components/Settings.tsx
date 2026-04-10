@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { DatePickerInput } from '@mantine/dates';
-import { TextInput } from '@mantine/core';
 import type { AppState } from '../types';
 
 interface SettingsProps {

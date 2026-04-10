@@ -127,7 +127,9 @@ export const TaskDayPicker: React.FC<TaskDayPickerProps> = ({
                   disabled={selectedDays.length === 1}
                   className={`px-3 py-1.5 rounded transition-colors flex items-center gap-1 ${
                     selectedDays.length === 1
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      ? isDarkMode
+                        ? 'bg-gray-800 text-gray-600 cursor-not-allowed'
+                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                       : isDarkMode
                       ? 'bg-gray-700 hover:bg-gray-600 text-gray-200'
                       : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
