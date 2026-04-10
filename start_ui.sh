@@ -1,2 +1,11 @@
-uv run streamlit run src/AutransUI.py 
-
+uv run streamlit run ./src/AutransUI.py \
+  --browser.gatherUsageStats=false \
+  --logger.level=warning \
+  --server.fileWatcherType=none \
+  --server.headless=true \
+  --server.enableXsrfProtection=true \
+  --server.port=8501 \
+  --server.address=127.0.0.1 \
+  --server.allowRunOnSave=false \
+  --server.runOnSave=false \
+  --server.maxUploadSize=200
