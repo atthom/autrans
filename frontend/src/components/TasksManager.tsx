@@ -1,49 +1,22 @@
 import React from 'react';
-import { TextInput, NumberInput, ActionIcon, RangeSlider, ColorInput } from '@mantine/core';
+import { TextInput, NumberInput, ActionIcon, ColorInput } from '@mantine/core';
 import { IconTrash } from '@tabler/icons-react';
 import { generateDistinctPastelColor } from '../utils/helpers';
+import { TaskDayPicker } from './TaskDayPicker';
 import type { Task } from '../types';
 
 interface TasksManagerProps {
   tasks: Task[];
   numDays: number;
+  startDate: string;
   onChange: (tasks: Task[]) => void;
   isDarkMode: boolean;
 }
 
-
-// Generate marks: show all if <10 days, otherwise show max 10 marks
-const generateMarks = (numDays: number) => {
-  // If fewer than 10 days, show all
-  if (numDays < 10) {
-    return Array.from({ length: numDays }, (_, i) => ({
-      value: i + 1,
-      label: String(i + 1)
-    }));
-  }
-  
-  // For 10+ days, show exactly 10 evenly-spaced marks
-  const maxMarks = 10;
-  const marks = [];
-  
-  // Calculate step to get exactly 10 marks
-  const step = (numDays - 1) / (maxMarks - 1);
-  
-  for (let i = 0; i < maxMarks - 1; i++) {
-    const value = Math.floor(1 + i * step);
-    marks.push({ value, label: String(value) });
-  }
-  
-  // Always add the last day to ensure we reach the end
-  marks.push({ value: numDays, label: String(numDays) });
-  
-  return marks;
-};
-
-export const TasksManager: React.FC<TasksManagerProps> = ({ tasks, numDays, onChange, isDarkMode }) => {
+export const TasksManager: React.FC<TasksManagerProps> = ({ tasks, numDays, startDate, onChange, isDarkMode }) => {
   const prevNumDaysRef = React.useRef(numDays);
   
-  // Auto-adjust task ranges when numDays changes
+  // Auto-adjust task selected days when numDays changes
   React.useEffect(() => {
     // Only run when numDays actually changes
     if (prevNumDaysRef.current !== numDays) {
@@ -51,24 +24,25 @@ export const TasksManager: React.FC<TasksManagerProps> = ({ tasks, numDays, onCh
       prevNumDaysRef.current = numDays;
       
       const adjustedTasks = tasks.map(task => {
-        // If task was using the full range before, extend it to new max
-        if (task.day_end === oldNumDays) {
+        // If task had all days selected before, select all new days
+        if (task.selected_days.length === oldNumDays) {
           return {
             ...task,
-            day_end: numDays,
+            selected_days: Array.from({ length: numDays }, (_, i) => i + 1),
           };
         }
-        // Otherwise just clamp values if they exceed new max
+        // Otherwise filter out days that exceed new max
+        const filteredDays = task.selected_days.filter(day => day <= numDays);
+        // Ensure at least one day is selected
         return {
           ...task,
-          day_start: Math.min(task.day_start, numDays),
-          day_end: Math.min(task.day_end, numDays),
+          selected_days: filteredDays.length > 0 ? filteredDays : [1],
         };
       });
       
       onChange(adjustedTasks);
     }
-  }, [numDays, tasks, onChange]);
+  }, [numDays]); // Only depend on numDays to avoid infinite loop
   
   const addTask = () => {
     if (tasks.length >= 20) {
@@ -81,8 +55,7 @@ export const TasksManager: React.FC<TasksManagerProps> = ({ tasks, numDays, onCh
       name: `Task ${tasks.length + 1}`,
       num_workers: 2,
       difficulty: 1,
-      day_start: 1,
-      day_end: numDays,
+      selected_days: Array.from({ length: numDays }, (_, i) => i + 1), // Select all days by default
       color: generateDistinctPastelColor(existingColors),
     };
     onChange([...tasks, newTask]);
@@ -164,29 +137,15 @@ export const TasksManager: React.FC<TasksManagerProps> = ({ tasks, numDays, onCh
             </div>
           </div>
 
-          {/* Day range slider - always shown */}
-          <div className="ml-4 pr-8 py-2 flex items-center gap-3">
-            <span className={`text-sm whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-900'}`}>Task range</span>
-            <div className="flex-1">
-              <RangeSlider
-                min={1}
-                max={numDays}
-                step={1}
-                minRange={0}
-                pushOnOverlap={false}
-                value={[task.day_start, task.day_end]}
-                onChange={(value) => {
-                  updateTask(index, {
-                    day_start: value[0],
-                    day_end: value[1],
-                  });
-                }}
-                marks={generateMarks(numDays)}
-                size="xs"
-                color="orange"
-                label={(value) => `Day ${value}`}
-              />
-            </div>
+          {/* Task day picker - collapsed by default */}
+          <div className="ml-4 pr-8">
+            <TaskDayPicker
+              numDays={numDays}
+              selectedDays={task.selected_days}
+              startDate={startDate}
+              onChange={(days) => updateTask(index, { selected_days: days })}
+              isDarkMode={isDarkMode}
+            />
           </div>
           </div>
         </div>

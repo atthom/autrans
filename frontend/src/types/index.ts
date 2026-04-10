@@ -4,8 +4,7 @@ export interface Task {
   name: string;
   num_workers: number;
   difficulty: number;
-  day_start: number;
-  day_end: number;
+  selected_days: number[];  // Array of selected day numbers (e.g., [1, 3, 5, 7])
   color?: string;
 }
 
@@ -25,7 +24,7 @@ export interface Constraint {
 
 export interface ScheduleRequest {
   workers: Array<[string, number[], number[], number]>;
-  tasks: Array<[string, number, number, number, number]>;
+  tasks: Array<[string, number, number, ...number[]]>;  // [name, num_workers, difficulty, ...selected_days]
   nb_days: number;
   task_per_day: string[];
   balance_daysoff: boolean;

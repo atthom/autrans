@@ -50,9 +50,9 @@ function App() {
     tasks: (() => {
       const colors: string[] = [];
       return [
-        { name: 'Cooking', num_workers: 2, difficulty: 1, day_start: 1, day_end: 7, color: (() => { const c = generateDistinctPastelColor(colors); colors.push(c); return c; })() },
-        { name: 'Cleaning', num_workers: 2, difficulty: 1, day_start: 1, day_end: 7, color: (() => { const c = generateDistinctPastelColor(colors); colors.push(c); return c; })() },
-        { name: 'Shopping', num_workers: 1, difficulty: 1, day_start: 1, day_end: 7, color: (() => { const c = generateDistinctPastelColor(colors); colors.push(c); return c; })() },
+        { name: 'Cooking', num_workers: 2, difficulty: 1, selected_days: [1, 2, 3, 4, 5, 6, 7], color: (() => { const c = generateDistinctPastelColor(colors); colors.push(c); return c; })() },
+        { name: 'Cleaning', num_workers: 2, difficulty: 1, selected_days: [1, 2, 3, 4, 5, 6, 7], color: (() => { const c = generateDistinctPastelColor(colors); colors.push(c); return c; })() },
+        { name: 'Shopping', num_workers: 1, difficulty: 1, selected_days: [1, 2, 3, 4, 5, 6, 7], color: (() => { const c = generateDistinctPastelColor(colors); colors.push(c); return c; })() },
       ];
     })(),
     workers: [
@@ -87,6 +87,11 @@ function App() {
   // Update state handlers
   const updateState = (updates: Partial<AppState>) => {
     setState(prev => ({ ...prev, ...updates }));
+    // Clear schedule data when settings change to prevent state mismatches
+    setScheduleData(null);
+    setScheduleRequest(null);
+    setError(null);
+    setSuccessMessage(null);
   };
 
   const handleLoadState = (loadedState: AppState) => {
@@ -130,14 +135,13 @@ function App() {
         .filter(c => c.type === 'soft')
         .map(c => constraintNameMap[c.name]);
 
-      // Convert tasks to backend format: [name, num_workers, difficulty, day_start, day_end]
-      const tasks: Array<[string, number, number, number, number]> = state.tasks.map(task => [
+      // Convert tasks to backend format: [name, num_workers, difficulty, ...selected_days]
+      const tasks = state.tasks.map(task => [
         task.name,
         task.num_workers,
         task.difficulty,
-        task.day_start,
-        task.day_end,
-      ]);
+        ...task.selected_days,
+      ] as [string, number, number, ...number[]]);
 
       // Convert workers to backend format: [name, days_off, task_preferences, workload_offset]
       const workers: Array<[string, number[], number[], number]> = state.workers.map(worker => [
@@ -243,6 +247,7 @@ function App() {
                     <TasksManager
                       tasks={state.tasks}
                       numDays={state.numDays}
+                      startDate={state.startDate}
                       onChange={(tasks) => updateState({ tasks })}
                       isDarkMode={isDarkModeActive}
                     />

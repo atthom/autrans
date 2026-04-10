@@ -107,7 +107,7 @@ export const WorkersManager: React.FC<WorkersManagerProps> = ({
             <div className="flex items-center gap-2">
               <label 
                 htmlFor={`workload-offset-${workerIndex}`}
-                className="text-xs font-medium text-gray-600 whitespace-nowrap"
+                className={`text-xs font-medium whitespace-nowrap ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}
               >
                 Offset:
               </label>

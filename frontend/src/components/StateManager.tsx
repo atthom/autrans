@@ -113,7 +113,13 @@ export const StateManager: React.FC<StateManagerProps> = ({ currentState, onLoad
         onChange={(e) => setStateCode(e.target.value)}
         placeholder="Paste state code here or generate one..."
         rows={3}
-        classNames={{ input: 'font-mono text-xs' }}
+        classNames={{ 
+          input: `font-mono text-xs ${
+            isDarkMode 
+              ? 'bg-gray-800 border-gray-600 text-gray-100 placeholder-gray-500' 
+              : 'bg-white border-gray-300 text-gray-900'
+          }` 
+        }}
       />
 
       <div className="flex gap-2">

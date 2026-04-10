@@ -6,7 +6,7 @@ interface ErrorDialogProps {
   isOpen: boolean;
   onClose: () => void;
   error: FailureResponse;
-  tasks?: Array<[string, number, number, number, number]>;
+  tasks?: Array<[string, number, number, ...number[]]>;  // New format: [name, num_workers, difficulty, ...selected_days]
   workers?: Array<[string, number[], number[], number]>;
   numDays?: number;
 }
@@ -58,27 +58,27 @@ export const ErrorDialog: React.FC<ErrorDialogProps> = ({
             <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">📊 Global Metrics</h3>
             <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
               <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-3 text-center">
-                <div className="text-2xl font-bold text-accent-500 dark:text-accent-400">{numDays}</div>
+                <div className="text-2xl font-bold text-primary-500 dark:text-primary-400">{numDays}</div>
                 <div className="text-xs text-gray-600 dark:text-gray-400">Days</div>
               </div>
               <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-3 text-center">
-                <div className="text-2xl font-bold text-accent-500 dark:text-accent-400">{numWorkers}</div>
+                <div className="text-2xl font-bold text-primary-500 dark:text-primary-400">{numWorkers}</div>
                 <div className="text-xs text-gray-600 dark:text-gray-400">Workers</div>
               </div>
               <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-3 text-center">
-                <div className="text-2xl font-bold text-accent-500 dark:text-accent-400">{numTasks}</div>
+                <div className="text-2xl font-bold text-primary-500 dark:text-primary-400">{numTasks}</div>
                 <div className="text-xs text-gray-600 dark:text-gray-400">Tasks</div>
               </div>
               <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-3 text-center">
-                <div className="text-2xl font-bold text-accent-500 dark:text-accent-400">{totalSlots}</div>
+                <div className="text-2xl font-bold text-primary-500 dark:text-primary-400">{totalSlots}</div>
                 <div className="text-xs text-gray-600 dark:text-gray-400">Task Slots</div>
               </div>
               <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-3 text-center">
-                <div className="text-2xl font-bold text-accent-500 dark:text-accent-400">{avgWorkload}</div>
+                <div className="text-2xl font-bold text-primary-500 dark:text-primary-400">{avgWorkload}</div>
                 <div className="text-xs text-gray-600 dark:text-gray-400">Daily Workload</div>
               </div>
               <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-3 text-center">
-                <div className="text-2xl font-bold text-accent-500 dark:text-accent-400">
+                <div className="text-2xl font-bold text-primary-500 dark:text-primary-400">
                   {details?.constraints?.length || 0}
                 </div>
                 <div className="text-xs text-gray-600 dark:text-gray-400">Constraints</div>
@@ -100,7 +100,7 @@ export const ErrorDialog: React.FC<ErrorDialogProps> = ({
                 <h4 className="text-md font-semibold text-gray-800 dark:text-gray-200 mb-2">⚠️ Warnings</h4>
                 <div className="space-y-2">
                   {diagnosticData.warnings.map((warning: string, index: number) => (
-                    <div key={index} className="p-3 bg-orange-50 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-700 rounded text-orange-800 dark:text-orange-200">
+                    <div key={index} className="p-3 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded text-yellow-800 dark:text-yellow-200">
                       {warning}
                     </div>
                   ))}

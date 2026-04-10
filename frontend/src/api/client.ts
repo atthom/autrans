@@ -22,7 +22,7 @@ export const scheduleApi = {
    */
   async exportICS(request: {
     workers: Array<[string, number[], number[], number]>;
-    tasks: Array<[string, number, number, number, number]>;
+    tasks: Array<[string, number, number, ...number[]]>;
     nb_days: number;
     balance_daysoff: boolean;
     start_date: string;
@@ -39,7 +39,7 @@ export const scheduleApi = {
    */
   async exportCSV(request: {
     workers: Array<[string, number[], number[], number]>;
-    tasks: Array<[string, number, number, number, number]>;
+    tasks: Array<[string, number, number, ...number[]]>;
     nb_days: number;
     balance_daysoff: boolean;
     start_date: string;

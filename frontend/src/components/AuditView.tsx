@@ -22,23 +22,23 @@ export const AuditView: React.FC<AuditViewProps> = ({ scheduleData, startDate, n
           <h3 className={`text-xl font-semibold mb-4 ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>📊 Global Metrics</h3>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className={`border rounded-lg p-4 text-center ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-              <div className={`text-3xl font-bold ${isDarkMode ? 'text-accent-400' : 'text-accent-500'}`}>{capacity.num_days}</div>
+              <div className={`text-3xl font-bold ${isDarkMode ? 'text-primary-400' : 'text-primary-500'}`}>{capacity.num_days}</div>
               <div className={`text-sm mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Days</div>
             </div>
             <div className={`border rounded-lg p-4 text-center ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-              <div className={`text-3xl font-bold ${isDarkMode ? 'text-accent-400' : 'text-accent-500'}`}>{capacity.num_workers}</div>
+              <div className={`text-3xl font-bold ${isDarkMode ? 'text-primary-400' : 'text-primary-500'}`}>{capacity.num_workers}</div>
               <div className={`text-sm mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Workers</div>
             </div>
             <div className={`border rounded-lg p-4 text-center ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-              <div className={`text-3xl font-bold ${isDarkMode ? 'text-accent-400' : 'text-accent-500'}`}>{capacity.num_tasks}</div>
+              <div className={`text-3xl font-bold ${isDarkMode ? 'text-primary-400' : 'text-primary-500'}`}>{capacity.num_tasks}</div>
               <div className={`text-sm mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Tasks</div>
             </div>
             <div className={`border rounded-lg p-4 text-center ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-              <div className={`text-3xl font-bold ${isDarkMode ? 'text-accent-400' : 'text-accent-500'}`}>{capacity.total_slots}</div>
+              <div className={`text-3xl font-bold ${isDarkMode ? 'text-primary-400' : 'text-primary-500'}`}>{capacity.total_slots}</div>
               <div className={`text-sm mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Task Slots</div>
             </div>
             <div className={`border rounded-lg p-4 text-center ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-              <div className={`text-3xl font-bold ${isDarkMode ? 'text-accent-400' : 'text-accent-500'}`}>{capacity.utilization_percent}%</div>
+              <div className={`text-3xl font-bold ${isDarkMode ? 'text-primary-400' : 'text-primary-500'}`}>{capacity.utilization_percent}%</div>
               <div className={`text-sm mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Utilization</div>
             </div>
           </div>
