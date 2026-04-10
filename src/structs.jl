@@ -22,20 +22,26 @@ Represents a task with its requirements
 struct AutransTask
     name::String
     num_workers::Int
-    day_range::UnitRange{Int}
+    day_range::Vector{Int}  # List of days when task is active
     difficulty::Int  # Task difficulty (default 1, must be >= 1)
     
     # Full constructor with difficulty
-    function AutransTask(name::String, num_workers::Int, day_range::UnitRange{Int}, difficulty::Int)
+    function AutransTask(name::String, num_workers::Int, day_range::Vector{Int}, difficulty::Int)
         @assert difficulty >= 1 "Task difficulty must be at least 1"
-        new(name, num_workers, day_range, difficulty)
+        @assert !isempty(day_range) "Task must have at least one day"
+        # Sort and deduplicate days
+        new(name, num_workers, sort(unique(day_range)), difficulty)
     end
     
     # Backward-compatible constructors (default difficulty to 1)
-    AutransTask(name::String, num_workers::Int, day_range::UnitRange{Int}) = AutransTask(name, num_workers, day_range, 1)
-    AutransTask(name::String, num_workers::Int, day_in::Int, day_out::Int) = AutransTask(name, num_workers, UnitRange(day_in, day_out), 1)
-    AutransTask(name::String, num_workers::Int, day_in::Int) = AutransTask(name, num_workers, UnitRange(day_in, day_in), 1)
-    AutransTask(name::String, num_workers::Int, day_in::Int, day_out::Int, difficulty::Int) = AutransTask(name, num_workers, UnitRange(day_in, day_out), difficulty)
+    AutransTask(name::String, num_workers::Int, day_range::Vector{Int}) = AutransTask(name, num_workers, day_range, 1)
+    
+    # Backward-compatible constructors for UnitRange (converts to Vector)
+    AutransTask(name::String, num_workers::Int, day_range::UnitRange{Int}, difficulty::Int) = AutransTask(name, num_workers, collect(day_range), difficulty)
+    AutransTask(name::String, num_workers::Int, day_range::UnitRange{Int}) = AutransTask(name, num_workers, collect(day_range), 1)
+    AutransTask(name::String, num_workers::Int, day_in::Int, day_out::Int) = AutransTask(name, num_workers, collect(day_in:day_out), 1)
+    AutransTask(name::String, num_workers::Int, day_in::Int) = AutransTask(name, num_workers, [day_in], 1)
+    AutransTask(name::String, num_workers::Int, day_in::Int, day_out::Int, difficulty::Int) = AutransTask(name, num_workers, collect(day_in:day_out), difficulty)
 end
 
 """

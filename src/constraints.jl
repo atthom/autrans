@@ -108,7 +108,7 @@ function apply_constraint!(model, assign, scheduler::AutransScheduler,
     for (t, task) in enumerate(scheduler.tasks)
         required = task.num_workers
         min_workers = max(0, required - relaxation)
-        outside_days = setdiff(1:D, task.day_range)
+        outside_days = setdiff(1:D, Set(task.day_range))
         
         @constraint(model, [d=task.day_range], sum(assign[w, d, t] for w in 1:N) >= min_workers)
         @constraint(model, [d=task.day_range], sum(assign[w, d, t] for w in 1:N) <= required)

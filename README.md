@@ -23,9 +23,24 @@ julia scripts/start_server.jl
 
 The API server will start on `http://127.0.0.1:8080`
 
-### 3. Start the UI (Optional)
+### 3. Start the UI
 
-In a separate terminal:
+You have two UI options:
+
+#### Option A: React Frontend (Recommended - Modern UI)
+
+```bash
+# Development mode (with hot reload)
+./start_react_dev.sh
+
+# Or start separately:
+# Terminal 1: julia scripts/start_server.jl
+# Terminal 2: cd frontend && npm run dev
+```
+
+The React UI will be available at `http://localhost:5173`
+
+#### Option B: Streamlit Frontend (Legacy)
 
 ```bash
 uv run streamlit run ./src/AutransUI.py
@@ -55,11 +70,14 @@ See [docs/API.md](docs/API.md) for complete API documentation including:
 
 ```
 ┌─────────────────┐         HTTP          ┌──────────────────┐
-│  Streamlit UI   │ ◄──────────────────► │  Julia Backend   │
-│  (Python)       │   JSON API Calls     │  (Oxygen.jl)     │
+│   React UI      │ ◄──────────────────► │  Julia Backend   │
+│ (TypeScript)    │   JSON API Calls     │  (Oxygen.jl)     │
 └─────────────────┘                       └──────────────────┘
-                                                    │
-                                                    ▼
+        OR                                          │
+┌─────────────────┐                                │
+│  Streamlit UI   │ ◄──────────────────────────────┤
+│  (Python)       │                                 │
+└─────────────────┘                                 ▼
                                           ┌──────────────────┐
                                           │  Optimization    │
                                           │  (JuMP + HiGHS)  │
@@ -70,18 +88,27 @@ See [docs/API.md](docs/API.md) for complete API documentation including:
 
 ```
 autrans/
+├── frontend/                    # React frontend (NEW)
+│   ├── src/
+│   │   ├── api/                # API client
+│   │   ├── types/              # TypeScript types
+│   │   ├── components/         # React components
+│   │   └── App.tsx             # Main app component
+│   ├── package.json            # Node dependencies
+│   └── vite.config.ts          # Vite configuration
 ├── src/
-│   ├── Autrans.jl          # Main module
-│   ├── server.jl           # HTTP API server (Oxygen.jl)
-│   ├── structs.jl          # Data structures
-│   ├── optimization.jl     # Scheduling optimization logic
-│   ├── display.jl          # Display utilities
-│   └── AutransUI.py        # Streamlit web interface
+│   ├── Autrans.jl              # Main module
+│   ├── server.jl               # HTTP API server (Oxygen.jl)
+│   ├── structs.jl              # Data structures
+│   ├── optimization.jl         # Scheduling optimization logic
+│   ├── display.jl              # Display utilities
+│   └── AutransUI.py            # Streamlit web interface (legacy)
 ├── scripts/
-│   └── start_server.jl     # Server startup script
+│   └── start_server.jl         # Server startup script
 ├── docs/
-│   └── API.md              # API documentation
-└── Project.toml            # Julia dependencies
+│   └── API.md                  # API documentation
+├── start_react_dev.sh          # React dev server launcher
+└── Project.toml                # Julia dependencies
 ```
 
 ## Development

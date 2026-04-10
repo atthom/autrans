@@ -36,23 +36,24 @@ end
 Parse task data from JSON request
 Returns Vector{AutransTask}
 
-Task data format: [name, num_workers, difficulty, day_start, day_end]
+Task data format: [name, num_workers, difficulty, ...selected_days]
 - name: String
 - num_workers: Int
-- difficulty: Int (optional, defaults to 1, must be >= 1)
-- day_start: Int
-- day_end: Int
+- difficulty: Int
+- selected_days: Variable number of day integers (e.g., 1, 3, 5, 7)
+
+Example: ["Cooking", 2, 1, 1, 2, 3, 4, 5, 6, 7] means Cooking task on days 1-7
+Example: ["Shopping", 1, 1, 2, 6, 7] means Shopping task on days 2, 6, 7
 """
 function parse_tasks(tasks_data)
     tasks = AutransTask[]
     for task_data in tasks_data
         name = task_data[1]
         num_workers = task_data[2]
-        # Parse difficulty (defaults to 1 if not provided or if only 4 elements)
-        difficulty = length(task_data) >= 5 ? Int(task_data[3]) : 1
-        day_start = length(task_data) >= 5 ? task_data[4] : task_data[3]
-        day_end = length(task_data) >= 5 ? task_data[5] : task_data[4]
-        push!(tasks, AutransTask(name, num_workers, day_start:day_end, difficulty))
+        difficulty = Int(task_data[3])
+        # Parse selected days (all elements after index 3)
+        selected_days = [Int(d) for d in task_data[4:end]]
+        push!(tasks, AutransTask(name, num_workers, selected_days, difficulty))
     end
     return tasks
 end
