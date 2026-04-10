@@ -1,0 +1,139 @@
+/* Minimal app-specific styles */
+/* Most styling will be done with Tailwind utilities */
+
+/* Mantine Fieldset Dark Mode Styles */
+.dark fieldset {
+  background-color: transparent !important;
+  border-color: rgb(55, 65, 81) !important;
+}
+
+.dark fieldset legend {
+  color: rgb(243, 244, 246) !important;
+}
+
+/* Mantine Accordion Dark Mode Styles */
+.dark [data-accordion-item] {
+  background-color: transparent !important;
+  border-color: rgb(55, 65, 81) !important;
+}
+
+.dark [data-accordion-control] {
+  background-color: rgb(31, 41, 55) !important;
+  color: rgb(243, 244, 246) !important;
+}
+
+.dark [data-accordion-control]:hover {
+  background-color: rgb(55, 65, 81) !important;
+}
+
+.dark [data-accordion-panel] {
+  background-color: rgb(31, 41, 55) !important;
+  color: rgb(243, 244, 246) !important;
+}
+
+.dark [data-accordion-chevron] {
+  color: rgb(156, 163, 175) !important;
+}
+
+/* Remove default borders from rc-collapse */
+.settings-collapse,
+.help-collapse,
+.export-collapse {
+  border: none !important;
+}
+
+.settings-collapse .rc-collapse-item,
+.help-collapse .rc-collapse-item,
+.export-collapse .rc-collapse-item {
+  border: none !important;
+  border-top: none !important;
+  border-bottom: none !important;
+}
+
+/* Smooth transitions for rc-collapse - Settings */
+.settings-collapse .rc-collapse-item {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.settings-collapse .rc-collapse-header {
+  padding: 1rem 1.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.settings-collapse .rc-collapse-header:hover {
+  background-color: #f9fafb;
+}
+
+.settings-collapse .rc-collapse-content {
+  overflow: visible;
+  transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.settings-collapse .rc-collapse-content-box {
+  opacity: 1;
+  transition: opacity 0.3s ease-in-out 0.1s;
+}
+
+.settings-collapse .rc-collapse-content-inactive .rc-collapse-content-box {
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.settings-collapse .rc-collapse-header .rc-collapse-expand-icon {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-block;
+}
+
+.settings-collapse .rc-collapse-item-active .rc-collapse-expand-icon {
+  transform: rotate(90deg);
+}
+
+/* Smooth transitions for rc-collapse - Help & Export */
+.help-collapse .rc-collapse-item,
+.export-collapse .rc-collapse-item {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.help-collapse .rc-collapse-header,
+.export-collapse .rc-collapse-header {
+  padding: 1rem 1.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.help-collapse .rc-collapse-header:hover,
+.export-collapse .rc-collapse-header:hover {
+  background-color: #f3f4f6;
+}
+
+.help-collapse .rc-collapse-content,
+.export-collapse .rc-collapse-content {
+  overflow: hidden;
+  transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.help-collapse .rc-collapse-content-box,
+.export-collapse .rc-collapse-content-box {
+  opacity: 1;
+  transition: opacity 0.3s ease-in-out 0.1s;
+}
+
+.help-collapse .rc-collapse-content-inactive .rc-collapse-content-box,
+.export-collapse .rc-collapse-content-inactive .rc-collapse-content-box {
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.help-collapse .rc-collapse-header .rc-collapse-expand-icon,
+.export-collapse .rc-collapse-header .rc-collapse-expand-icon {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-block;
+}
+
+.help-collapse .rc-collapse-item-active .rc-collapse-expand-icon,
+.export-collapse .rc-collapse-item-active .rc-collapse-expand-icon {
+  transform: rotate(90deg);
+}
