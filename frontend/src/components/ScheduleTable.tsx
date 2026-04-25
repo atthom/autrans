@@ -28,8 +28,15 @@ export const ScheduleTable: React.FC<ScheduleTableProps> = ({
   startDate,
   numDays,
   displayDaysAs,
-  isDarkMode = false
+  isDarkMode = false,
 }) => {
+  const renderStart = performance.now();
+  console.log('[ScheduleTable] RENDER START', {
+    timestamp: renderStart,
+    scheduleDataKeys: Object.keys(scheduleData || {}),
+    colorsLength: colors.length,
+    numDays
+  });
   const { headers, rows } = parseTableData(scheduleData);
 
   // Transform day headers based on display mode

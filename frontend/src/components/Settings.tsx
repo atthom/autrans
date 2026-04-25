@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { DatePickerInput } from '@mantine/dates';
+import { Tooltip } from '@mantine/core';
+import { IconInfoCircle } from '@tabler/icons-react';
 import type { AppState } from '../types';
 
 interface SettingsProps {
@@ -23,6 +25,8 @@ const formatDate = (date: Date): string => {
 };
 
 export const Settings: React.FC<SettingsProps> = ({ state, onChange, isDarkMode }) => {
+  console.log('[Settings] RENDER');
+  
   // Initialize date range from state
   const initialStart = parseDate(state.startDate);
   const initialEnd = new Date(initialStart);
@@ -33,71 +37,96 @@ export const Settings: React.FC<SettingsProps> = ({ state, onChange, isDarkMode 
 
   return (
     <div className="space-y-4">
-      {/* Schedule Range and Display Days - Same Row */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-        <div className="md:col-span-7">
-          <DatePickerInput
-            type="range"
-            label={
-              <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
-                Schedule Range ({(() => {
-                  if (value && value[0] && value[1]) {
-                    const diffTime = value[1].getTime() - value[0].getTime();
-                    const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-                    return `${days} ${days === 1 ? 'day' : 'days'}`;
-                  }
-                  return `${state.numDays} ${state.numDays === 1 ? 'day' : 'days'}`;
-                })()})
-              </span>
-            }
-            placeholder="Select date range"
-            value={value}
-            minDate={value[0] || new Date()}
-            maxDate={value[0] 
-              ? new Date(value[0].getTime() + 20 * 24 * 60 * 60 * 1000)
-              : new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
-            }
-            onChange={(newValue) => {
-              // Convert strings to Dates if needed
-              const convertedValue: [Date | null, Date | null] = newValue
-                ? [
-                    newValue[0] ? (typeof newValue[0] === 'string' ? new Date(newValue[0]) : newValue[0]) : null,
-                    newValue[1] ? (typeof newValue[1] === 'string' ? new Date(newValue[1]) : newValue[1]) : null
-                  ]
-                : [null, null];
+      {/* Schedule Range - Full Width */}
+      <div>
+        <DatePickerInput
+          type="range"
+          label={
+            <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+              Schedule Range ({(() => {
+                if (value && value[0] && value[1]) {
+                  const diffTime = value[1].getTime() - value[0].getTime();
+                  const days = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                  return `${days} ${days === 1 ? 'day' : 'days'}`;
+                }
+                return `${state.numDays} ${state.numDays === 1 ? 'day' : 'days'}`;
+              })()})
+              <Tooltip label="Select the date range for your schedule. Maximum 20 days allowed." withArrow>
+                <IconInfoCircle 
+                  size={16} 
+                  className={`inline ml-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}
+                  style={{ verticalAlign: 'middle' }}
+                />
+              </Tooltip>
+            </span>
+          }
+          placeholder="Select date range"
+          value={value}
+          minDate={value[0] || new Date()}
+          maxDate={value[0] 
+            ? new Date(value[0].getTime() + 20 * 24 * 60 * 60 * 1000)
+            : new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)
+          }
+          onChange={(newValue) => {
+            // Convert strings to Dates if needed
+            const convertedValue: [Date | null, Date | null] = newValue
+              ? [
+                  newValue[0] ? (typeof newValue[0] === 'string' ? new Date(newValue[0]) : newValue[0]) : null,
+                  newValue[1] ? (typeof newValue[1] === 'string' ? new Date(newValue[1]) : newValue[1]) : null
+                ]
+              : [null, null];
+            
+            setValue(convertedValue); // Update local state directly
+            
+            // Extract and save to app state when both dates are selected
+            if (convertedValue[0] && convertedValue[1]) {
+              const [start, end] = convertedValue;
+              // Calculate number of days (inclusive)
+              const diffTime = end.getTime() - start.getTime();
+              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
               
-              setValue(convertedValue); // Update local state directly
+              // Clamp between 1-20 days
+              const clampedDays = Math.min(Math.max(diffDays, 1), 20);
               
-              // Extract and save to app state when both dates are selected
-              if (convertedValue[0] && convertedValue[1]) {
-                const [start, end] = convertedValue;
-                // Calculate number of days (inclusive)
-                const diffTime = end.getTime() - start.getTime();
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-                
-                // Clamp between 1-20 days
-                const clampedDays = Math.min(Math.max(diffDays, 1), 20);
-                
-                onChange({ 
-                  startDate: formatDate(start),
-                  numDays: clampedDays
-                });
-              }
-            }}
-            valueFormat="MMM DD, YYYY"
-            classNames={{
-              input: 'border-gray-300 focus:border-primary-500 focus:ring-primary-500'
-            }}
-          />
-        </div>
+              onChange({ 
+                startDate: formatDate(start),
+                numDays: clampedDays
+              });
+            }
+          }}
+          valueFormat="MMM DD, YYYY"
+          classNames={{
+            input: 'border-gray-300 focus:border-primary-500 focus:ring-primary-500'
+          }}
+        />
+      </div>
 
+      {/* Display and Balance Mode - Same Row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Display Days As Toggle */}
-        <div className="md:col-span-5">
+        <div>
           <span 
             id="display-days-label"
             className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}
           >
             Display:
+            <Tooltip 
+              label={
+                <>
+                  <div><strong>Numbers:</strong> Day1, Day2, Day3...</div>
+                  <div className="mt-1"><strong>Days:</strong> Mon, Tue, Wed...</div>
+                </>
+              }
+              withArrow
+              multiline
+              w={220}
+            >
+              <IconInfoCircle 
+                size={16} 
+                className={`inline ml-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}
+                style={{ verticalAlign: 'middle' }}
+              />
+            </Tooltip>
           </span>
           <div 
             role="group"
@@ -132,15 +161,31 @@ export const Settings: React.FC<SettingsProps> = ({ state, onChange, isDarkMode 
             </button>
           </div>
         </div>
-      </div>
 
-      {/* Balance Mode - Full Width */}
-      <div>
+        {/* Balance Mode */}
+        <div>
         <span 
           id="balance-mode-label"
           className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-300' : 'text-gray-600'}`}
         >
           Balance Mode:
+          <Tooltip 
+            label={
+              <>
+                <div><strong>Equal:</strong> Distribute workload equally among all workers</div>
+                <div className="mt-1"><strong>Proportional:</strong> Distribute workload proportionally based on each worker's availability</div>
+              </>
+            } 
+            withArrow
+            multiline
+            w={280}
+          >
+            <IconInfoCircle 
+              size={16} 
+              className={`inline ml-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}
+              style={{ verticalAlign: 'middle' }}
+            />
+          </Tooltip>
         </span>
         <div 
           role="group"
@@ -173,6 +218,7 @@ export const Settings: React.FC<SettingsProps> = ({ state, onChange, isDarkMode 
           >
             Equal
           </button>
+        </div>
         </div>
       </div>
     </div>

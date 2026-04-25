@@ -149,7 +149,7 @@ const SortableConstraintItem: React.FC<SortableConstraintItemProps> = ({
   );
 };
 
-export const ConstraintsManager: React.FC<ConstraintsManagerProps> = ({
+export const ConstraintsManager: React.FC<ConstraintsManagerProps> = React.memo(({
   constraints,
   onChange,
   isDarkMode,
@@ -340,4 +340,6 @@ export const ConstraintsManager: React.FC<ConstraintsManagerProps> = ({
       )}
     </div>
   );
-};
+});
+
+ConstraintsManager.displayName = 'ConstraintsManager';

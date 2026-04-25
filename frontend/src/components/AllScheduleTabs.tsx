@@ -20,7 +20,7 @@ interface AllScheduleTabsProps {
   isDarkMode: boolean;
 }
 
-export const AllScheduleTabs: React.FC<AllScheduleTabsProps> = ({
+export const AllScheduleTabs: React.FC<AllScheduleTabsProps> = React.memo(({
   scheduleData,
   scheduleRequest,
   startDate,
@@ -31,6 +31,14 @@ export const AllScheduleTabs: React.FC<AllScheduleTabsProps> = ({
   isLoading,
   isDarkMode,
 }) => {
+  const renderStart = performance.now();
+  console.log('[AllScheduleTabs] RENDER START', {
+    timestamp: renderStart,
+    hasScheduleData: !!scheduleData,
+    isLoading,
+    numDays,
+    colorsLength: colors.length
+  });
   // Skeleton loading component
   const LoadingSkeleton = () => (
     <div className="space-y-4">
@@ -168,4 +176,6 @@ export const AllScheduleTabs: React.FC<AllScheduleTabsProps> = ({
       <Tabs tabs={tabs} defaultTab="table" isDarkMode={isDarkMode} />
     </div>
   );
-};
+});
+
+AllScheduleTabs.displayName = 'AllScheduleTabs';

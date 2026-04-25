@@ -1,8 +1,20 @@
 import axios from 'axios';
 import type { ScheduleRequest, ScheduleResponse, FailureResponse } from '../types';
 
+// Get API URL from environment variable or use default
+// In development: uses Vite proxy (empty string)
+// In production/mobile: uses VITE_API_URL environment variable
+const getBaseURL = () => {
+  // If VITE_API_URL is set, use it (for production/mobile)
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  // Otherwise use empty string (for local dev with proxy)
+  return '';
+};
+
 const api = axios.create({
-  baseURL: import.meta.env.DEV ? '' : '', // Proxy handles this in dev, same origin in prod
+  baseURL: getBaseURL(),
   headers: {
     'Content-Type': 'application/json',
   },

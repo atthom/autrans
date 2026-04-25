@@ -8,6 +8,7 @@ import App from './App.tsx'
 
 const theme = createTheme({
   primaryColor: 'teal',
+  respectReducedMotion: false,
 });
 
 function Root() {

@@ -21,4 +21,4 @@ println("  POST /export/ics  - Export schedule as iCalendar (.ics)")
 println("  POST /export/csv  - Export schedule as CSV")
 println("=" ^ 60)
 
-start_server("127.0.0.1", 8080)
+start_server("127.0.0.1", 8501)

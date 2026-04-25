@@ -28,6 +28,11 @@ export const WorkersManager: React.FC<WorkersManagerProps> = ({
   onChange,
   isDarkMode
 }) => {
+  console.log('[WorkersManager] RENDER', { 
+    workersCount: workers.length, 
+    tasksCount: tasks.length,
+    workersPrefsLengths: workers.map(w => w.task_preferences?.length || 0)
+  });
 
   const addWorker = () => {
     if (workers.length >= 20) {
@@ -63,30 +68,6 @@ export const WorkersManager: React.FC<WorkersManagerProps> = ({
     newPrefs[taskIndex] = rating;
     updateWorker(workerIndex, { task_preferences: newPrefs });
   };
-
-  // Initialize workers with rating system (convert old format if needed)
-  const initializedRef = React.useRef(false);
-  React.useEffect(() => {
-    if (!initializedRef.current && tasks.length > 0) {
-      const needsInit = workers.some(w => 
-        w.task_preferences.length === 0 || 
-        w.task_preferences.length !== tasks.length
-      );
-      
-      if (needsInit) {
-        const updatedWorkers = workers.map(worker => {
-          // If empty or wrong length, initialize with all Neutral
-          if (worker.task_preferences.length === 0 || worker.task_preferences.length !== tasks.length) {
-            return { ...worker, task_preferences: tasks.map(() => RATING_NEUTRAL) };
-          }
-          return worker;
-        });
-        onChange(updatedWorkers);
-        initializedRef.current = true;
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasks.length])
 
   return (
     <div className="space-y-4">
@@ -144,7 +125,9 @@ export const WorkersManager: React.FC<WorkersManagerProps> = ({
             >
               {/* Days Off Accordion */}
               <Accordion.Item value="daysoff">
-                <Accordion.Control>
+                <Accordion.Control onClick={() => {
+                  console.log('[WorkersManager] Days Off clicked for worker:', worker.name);
+                }}>
                   <span className="text-sm font-medium">Days Off ({worker.days_off.length})</span>
                 </Accordion.Control>
                 <Accordion.Panel>
@@ -161,7 +144,11 @@ export const WorkersManager: React.FC<WorkersManagerProps> = ({
               {/* Task Preferences Accordion */}
               {tasks.length > 0 && worker.task_preferences.length > 0 && (
                 <Accordion.Item value="preferences">
-                  <Accordion.Control>
+                  <Accordion.Control onClick={() => {
+                    console.log('[WorkersManager] Task Preferences clicked for worker:', worker.name);
+                    console.log('[WorkersManager] Worker preferences:', worker.task_preferences);
+                    console.log('[WorkersManager] Tasks:', tasks.map(t => t.name));
+                  }}>
                     <span className="text-sm font-medium">Task Preferences</span>
                   </Accordion.Control>
                   <Accordion.Panel>
@@ -179,7 +166,10 @@ export const WorkersManager: React.FC<WorkersManagerProps> = ({
                             <span className={`text-sm font-medium flex-1 ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>{task.name}</span>
                             <div className="flex gap-1">
                               <button
-                                onClick={() => setTaskRating(workerIndex, taskIndex, RATING_LIKE)}
+                                onClick={() => {
+                                  console.log('[WorkersManager] LIKE clicked:', worker.name, task.name);
+                                  setTaskRating(workerIndex, taskIndex, RATING_LIKE);
+                                }}
                                 className={`p-2 rounded transition-colors ${
                                   rating === RATING_LIKE
                                     ? 'bg-primary-500 text-white'
@@ -192,7 +182,10 @@ export const WorkersManager: React.FC<WorkersManagerProps> = ({
                                 <IconMoodSmile size={16} />
                               </button>
                               <button
-                                onClick={() => setTaskRating(workerIndex, taskIndex, RATING_NEUTRAL)}
+                                onClick={() => {
+                                  console.log('[WorkersManager] NEUTRAL clicked:', worker.name, task.name);
+                                  setTaskRating(workerIndex, taskIndex, RATING_NEUTRAL);
+                                }}
                                 className={`p-2 rounded transition-colors ${
                                   rating === RATING_NEUTRAL
                                     ? isDarkMode ? 'bg-gray-500 text-white' : 'bg-gray-400 text-white'
@@ -205,7 +198,10 @@ export const WorkersManager: React.FC<WorkersManagerProps> = ({
                                 <IconMoodEmpty size={16} />
                               </button>
                               <button
-                                onClick={() => setTaskRating(workerIndex, taskIndex, RATING_DISLIKE)}
+                                onClick={() => {
+                                  console.log('[WorkersManager] DISLIKE clicked:', worker.name, task.name);
+                                  setTaskRating(workerIndex, taskIndex, RATING_DISLIKE);
+                                }}
                                 className={`p-2 rounded transition-colors ${
                                   rating === RATING_DISLIKE
                                     ? isDarkMode ? 'bg-rose-600 text-white' : 'bg-rose-400 text-white'

@@ -14,10 +14,13 @@ interface TasksManagerProps {
 }
 
 export const TasksManager: React.FC<TasksManagerProps> = ({ tasks, numDays, startDate, onChange, isDarkMode }) => {
+  console.log('[TasksManager] RENDER', { tasksCount: tasks.length });
+  
   const prevNumDaysRef = React.useRef(numDays);
   
   // Auto-adjust task selected days when numDays changes
   React.useEffect(() => {
+    console.log('[TasksManager] useEffect [numDays]', numDays);
     // Only run when numDays actually changes
     if (prevNumDaysRef.current !== numDays) {
       const oldNumDays = prevNumDaysRef.current;
@@ -121,6 +124,10 @@ export const TasksManager: React.FC<TasksManagerProps> = ({ tasks, numDays, star
                 onChange={(color) => updateTask(index, { color })}
                 format="hex"
                 withEyeDropper={false}
+                classNames={{
+                  input: 'md:block hidden', // Hide text input on small screens
+                  wrapper: 'flex items-center'
+                }}
               />
             </div>
             

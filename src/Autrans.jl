@@ -6,9 +6,11 @@ include("structs.jl")
 include("constraints.jl")
 include("optimization.jl")
 include("display.jl")
+include("server.jl")
 
 export AutransWorker, AutransTask, AutransScheduler, ProportionalEquity, AbsoluteEquity,
-       solve, print_schedule, print_debug_tasks_workers, print_debug_days_workers, print_all
+       solve, print_schedule, print_debug_tasks_workers, print_debug_days_workers, print_all,
+       start_server
 
 
 end # module Autrans

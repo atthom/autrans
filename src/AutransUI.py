@@ -292,96 +292,93 @@ def display_chore(chore_name, nb_worker, difficulty, color, i, with_range=False)
 
 def display_worker(worker_name, worker_days_off, i, task_names):
     if st.session_state['with_days_off']:
-        worker_row_i = st.columns([2, 3, 1], vertical_alignment="bottom")
+        worker_row_i = st.columns([2, 2, 1, 1], vertical_alignment="bottom")
         
         worker_name_i = worker_row_i[0].text_input(f"worker name {i}", value=worker_name, key=f"worker_name_{i}", placeholder="name", label_visibility="collapsed")
         worker_days_off_i = worker_row_i[1].multiselect(f"days_off{i}", options=selected_days, default=worker_days_off, key=f"worker_days_off_{i}",
                                                     help="Select days off, leave empty for no days off", placeholder="days off", label_visibility="collapsed")
-        worker_row_i[2].button("", icon=":material/close:", type="secondary", 
-                    key=f"del_worker_{i}", use_container_width=True,
-                    on_click=del_worker, args=[i])
-        
-    else:
-        worker_row_i = st.columns([4, 1], vertical_alignment="bottom")
-        worker_name_i = worker_row_i[0].text_input(f"worker name {i}", value=worker_name, key=f"worker_name_{i}", placeholder="name", label_visibility="collapsed")
-        worker_days_off_i = []
-        worker_row_i[1].button("", icon=":material/close:", type="secondary", 
-                    key=f"del_worker_{i}", use_container_width=True,
-                    on_click=del_worker, args=[i])
-    
-    # Show workload offset if enabled
-    worker_offset_i = 0
-    if st.session_state.get('show_workload_offset', False):
-        # Initialize offset if not exists
-        if f"worker_offset_{i}" not in st.session_state:
-            st.session_state[f"worker_offset_{i}"] = 0
-        
-        offset_col = st.columns([1])
-        worker_offset_i = offset_col[0].number_input(
+        # Workload offset (compact, on same row)
+        worker_offset_i = worker_row_i[2].number_input(
             f"Workload offset for {worker_name_i}",
-            value=st.session_state[f"worker_offset_{i}"],
+            value=0,
             min_value=-10,
             max_value=10,
             step=1,
             key=f"worker_offset_{i}",
-            help="Negative = worked too much before (give fewer tasks), Positive = worked too little (give more tasks)",
+            help="Offset: negative = worked too much before, positive = worked too little",
             label_visibility="collapsed"
         )
+        worker_row_i[3].button("", icon=":material/close:", type="secondary", 
+                    key=f"del_worker_{i}", use_container_width=True,
+                    on_click=del_worker, args=[i])
+        
+    else:
+        worker_row_i = st.columns([3, 1, 1], vertical_alignment="bottom")
+        worker_name_i = worker_row_i[0].text_input(f"worker name {i}", value=worker_name, key=f"worker_name_{i}", placeholder="name", label_visibility="collapsed")
+        worker_days_off_i = []
+        # Workload offset (compact, on same row)
+        worker_offset_i = worker_row_i[1].number_input(
+            f"Workload offset for {worker_name_i}",
+            value=0,
+            min_value=-10,
+            max_value=10,
+            step=1,
+            key=f"worker_offset_{i}",
+            help="Offset: negative = worked too much before, positive = worked too little",
+            label_visibility="collapsed"
+        )
+        worker_row_i[2].button("", icon=":material/close:", type="secondary", 
+                    key=f"del_worker_{i}", use_container_width=True,
+                    on_click=del_worker, args=[i])
     
-    # Show task preferences if enabled
+    # Show task preferences (always available per worker, collapsible)
     worker_preferences_i = []
-    if st.session_state.get('show_preferences', False) and task_names:
-        # Initialize preference list if not exists
-        if f"worker_pref_list_{i}" not in st.session_state:
-            st.session_state[f"worker_pref_list_{i}"] = []
-        
-        pref_list = st.session_state[f"worker_pref_list_{i}"]
-        
-        # Get available tasks (not yet in preference list)
-        available_tasks = [t for t in task_names if t not in pref_list]
-        
-        # Dropdown to add tasks
-        if available_tasks:
-            add_col1, add_col2 = st.columns([3, 1])
-            selected_to_add = add_col1.selectbox(
-                "Add task preference",
-                options=["Select task..."] + available_tasks,
-                key=f"worker_{i}_add_pref",
-                label_visibility="collapsed"
-            )
+    if task_names:
+        with st.expander("Task preferences", expanded=False):
+            # Initialize preference list with ALL tasks in default order if not exists
+            if f"worker_pref_list_{i}" not in st.session_state:
+                st.session_state[f"worker_pref_list_{i}"] = list(task_names)
             
-            if add_col2.button("Add", key=f"worker_{i}_add_btn", use_container_width=True):
-                if selected_to_add != "Select task...":
-                    pref_list.append(selected_to_add)
-                    st.session_state[f"worker_pref_list_{i}"] = pref_list
-                    st.rerun()
-        
-        # Display ranked preferences with up arrow and remove button
-        if pref_list:
-            st.markdown("**Ranked Preferences:**")
-            for rank, task in enumerate(pref_list):
-                pref_row = st.columns([1, 4, 1, 1], vertical_alignment="center")
-                pref_row[0].markdown(f"**{rank + 1}.**")
-                pref_row[1].markdown(task)
-                
-                # Up arrow (disabled for first item)
-                if rank > 0:
-                    if pref_row[2].button("↑", key=f"worker_{i}_up_{rank}", use_container_width=True):
-                        # Swap with previous item
-                        pref_list[rank], pref_list[rank-1] = pref_list[rank-1], pref_list[rank]
-                        st.session_state[f"worker_pref_list_{i}"] = pref_list
-                        st.rerun()
-                else:
-                    pref_row[2].empty()
-                
-                # Remove button
-                if pref_row[3].button("×", key=f"worker_{i}_remove_{rank}", use_container_width=True):
-                    pref_list.pop(rank)
-                    st.session_state[f"worker_pref_list_{i}"] = pref_list
-                    st.rerun()
-        
-        # Convert to backend format (1-based task indices)
-        worker_preferences_i = [task_names.index(task) + 1 for task in pref_list]
+            pref_list = st.session_state[f"worker_pref_list_{i}"]
+            
+            # Ensure pref_list has all tasks (in case tasks were added/removed)
+            # Add any new tasks to the end
+            for task in task_names:
+                if task not in pref_list:
+                    pref_list.append(task)
+            # Remove any tasks that no longer exist
+            pref_list = [task for task in pref_list if task in task_names]
+            st.session_state[f"worker_pref_list_{i}"] = pref_list
+            
+            # Display ranked preferences with up/down arrows
+            if pref_list:
+                for rank, task in enumerate(pref_list):
+                    pref_row = st.columns([1, 5, 1, 1], vertical_alignment="center")
+                    pref_row[0].markdown(f"**{rank + 1}.**")
+                    pref_row[1].markdown(task)
+                    
+                    # Up arrow (disabled for first item)
+                    if rank > 0:
+                        if pref_row[2].button("↑", key=f"worker_{i}_up_{rank}", use_container_width=True):
+                            # Swap with previous item
+                            pref_list[rank], pref_list[rank-1] = pref_list[rank-1], pref_list[rank]
+                            st.session_state[f"worker_pref_list_{i}"] = pref_list
+                            st.rerun()
+                    else:
+                        pref_row[2].empty()
+                    
+                    # Down arrow (disabled for last item)
+                    if rank < len(pref_list) - 1:
+                        if pref_row[3].button("↓", key=f"worker_{i}_down_{rank}", use_container_width=True):
+                            # Swap with next item
+                            pref_list[rank], pref_list[rank+1] = pref_list[rank+1], pref_list[rank]
+                            st.session_state[f"worker_pref_list_{i}"] = pref_list
+                            st.rerun()
+                    else:
+                        pref_row[3].empty()
+            
+            # Convert to backend format (1-based task indices)
+            worker_preferences_i = [task_names.index(task) + 1 for task in pref_list]
 
     return worker_name_i, worker_days_off_i, worker_preferences_i
 
@@ -691,23 +688,7 @@ def display_worker_section():
     if 'with_days_off' not in st.session_state:
         st.session_state['with_days_off'] = True
     
-    # Show workload offset toggle
-    if 'show_workload_offset' not in st.session_state:
-        st.session_state['show_workload_offset'] = False
-    
-    st.session_state['show_workload_offset'] = st.toggle("Show workload offset", 
-                                                          value=st.session_state['show_workload_offset'],
-                                                          help="Compensate for past workload imbalances (negative = worked too much, positive = worked too little)")
-    
-    # Show task preferences toggle
-    if 'show_preferences' not in st.session_state:
-        st.session_state['show_preferences'] = False
-    
-    st.session_state['show_preferences'] = st.toggle("Show task preferences", 
-                                                      value=st.session_state['show_preferences'],
-                                                      help="Allow workers to rank tasks by preference")
-    
-    # Get task names for preferences
+    # Get task names for preferences (always available, controlled per worker)
     task_names = st.session_state.get('chore_names', [])
 
     if "workers" not in st.session_state:
@@ -934,16 +915,16 @@ if submit:
         else:
             w_days_off_idx = []
         
-        # Collect task preferences if enabled
+        # Collect task preferences (always collected if preference list exists)
         w_preferences = []
-        if st.session_state.get('show_preferences', False) and task_names:
+        if task_names:
             pref_list = st.session_state.get(f"worker_pref_list_{i}", [])
-            w_preferences = [task_names.index(task) + 1 for task in pref_list if task in task_names]
+            # Only send non-empty preference list (if user has reordered tasks, it won't be in default order)
+            if pref_list:
+                w_preferences = [task_names.index(task) + 1 for task in pref_list if task in task_names]
         
-        # Collect workload offset if enabled
-        w_offset = 0
-        if st.session_state.get('show_workload_offset', False):
-            w_offset = st.session_state.get(f"worker_offset_{i}", 0)
+        # Collect workload offset (always collected)
+        w_offset = st.session_state.get(f"worker_offset_{i}", 0)
         
         # Add worker with preferences and offset
         workers.append((w_name, w_days_off_idx, w_preferences, w_offset))
@@ -1484,18 +1465,20 @@ with tables:
               - Bob has offset +1 (worked 1 less task last trip) → Gets 1 more task this trip
             
             **Task Preferences** (Optional):
-            - When enabled, workers can rank tasks by preference
+            - Each worker has a "This worker has task preferences" checkbox
+            - Enable preferences individually for workers who care about task assignments
             - **How to use:**
-              1. Select a task from the dropdown to add it to preferences
-              2. Click "Add" to add it to the ranked list
-              3. Use ↑ arrow to move tasks up (swap with item above)
-              4. Click × to remove a task from preferences
-              5. Leave empty if worker has no preferences
+              1. Check the "This worker has task preferences" box for a specific worker
+              2. When checked, all tasks appear in a ranked list (default order initially)
+              3. Use ↑ arrow to move tasks up (higher preference)
+              4. Use ↓ arrow to move tasks down (lower preference)
+              5. Tasks at the top = most preferred, tasks at the bottom = least preferred
+              6. Leave the box unchecked for workers who don't have preferences
             - **How it affects scheduling:**
-              - Ranked tasks: Worker is more likely to get these assignments
-              - Unranked tasks: Worker is less likely to get these assignments
-              - The scheduler tries to respect preferences while maintaining fairness
-            - **Example:** If Alex ranks [Cleaning, Cooking], they'll get more Cleaning/Cooking and less Shopping
+              - Workers **with** preferences: Scheduler tries to assign tasks higher in their preference list
+              - Workers **without** preferences: Scheduler assigns tasks based only on fairness and other constraints
+              - The scheduler balances preferences with fairness constraints
+            - **Example:** If Alex has preferences and ranks [Cleaning, Cooking, Shopping], they'll get more Cleaning than Cooking, and more Cooking than Shopping. If Bob has no preferences, he gets tasks assigned purely for balance.
             
             ---
             

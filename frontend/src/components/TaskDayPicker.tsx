@@ -18,30 +18,48 @@ export const TaskDayPicker: React.FC<TaskDayPickerProps> = ({
   onChange,
   isDarkMode,
 }) => {
+  const renderStart = performance.now();
+  console.log('[TaskDayPicker] RENDER START', { 
+    timestamp: renderStart,
+    numDays, 
+    selectedDaysCount: selectedDays.length,
+    selectedDays 
+  });
+  
   // Parse start date
+  console.log('[TaskDayPicker] Before parseDate');
   const parseDate = (dateStr: string): Date => {
     const [year, month, day] = dateStr.split('-').map(Number);
     return new Date(year, month - 1, day);
   };
 
+  console.log('[TaskDayPicker] Calling parseDate with:', startDate);
   const tripStartDate = parseDate(startDate);
+  console.log('[TaskDayPicker] After parseDate, creating tripEndDate');
+  
   const tripEndDate = new Date(tripStartDate);
   tripEndDate.setDate(tripStartDate.getDate() + numDays - 1);
+  console.log('[TaskDayPicker] tripEndDate created');
 
   // Track the date to focus the calendar on
+  console.log('[TaskDayPicker] Before useState for calendarDate');
   const [calendarDate, setCalendarDate] = useState<Date>(tripStartDate);
+  console.log('[TaskDayPicker] After useState for calendarDate');
 
   // When planning range changes, refocus calendar
   useEffect(() => {
+    console.log('[TaskDayPicker] useEffect [startDate, numDays]', { startDate, numDays });
     setCalendarDate(tripStartDate);
   }, [startDate, numDays]);
 
   // Convert day numbers to Date objects
+  console.log('[TaskDayPicker] Before mapping selectedDates');
   const selectedDates = selectedDays.map(dayNum => {
     const date = new Date(tripStartDate);
     date.setDate(tripStartDate.getDate() + dayNum - 1);
     return date;
   });
+  console.log('[TaskDayPicker] After mapping selectedDates, count:', selectedDates.length);
 
   // Convert Date objects back to day numbers
   const handleChange = (value: Date[] | string[]) => {
@@ -82,10 +100,19 @@ export const TaskDayPicker: React.FC<TaskDayPickerProps> = ({
     ? `Task Days: All days (${numDays})` 
     : `Task Days: ${selectedDays.length} of ${numDays} days`;
 
+  console.log('[TaskDayPicker] Before return/render JSX');
+  const renderEnd = performance.now();
+  console.log('[TaskDayPicker] Render took:', renderEnd - renderStart, 'ms');
+  
   return (
     <Accordion>
       <Accordion.Item value="task-days">
-        <Accordion.Control>
+        <Accordion.Control onClick={() => {
+          console.log('[TaskDayPicker] Task Days accordion clicked');
+          console.log('[TaskDayPicker] Selected days:', selectedDays);
+          console.log('[TaskDayPicker] Total days:', numDays);
+          console.log('[TaskDayPicker] Accordion.Panel will render next');
+        }}>
           <span className={`font-medium ${isDarkMode ? 'text-gray-100' : 'text-gray-900'}`}>
             {headerText}
           </span>
@@ -97,9 +124,16 @@ export const TaskDayPicker: React.FC<TaskDayPickerProps> = ({
               <DatePicker
                 type="multiple"
                 value={selectedDates}
-                onChange={handleChange}
+                onChange={(value) => {
+                  console.log('[TaskDayPicker] DatePicker onChange called with:', value);
+                  handleChange(value);
+                  console.log('[TaskDayPicker] DatePicker onChange completed');
+                }}
                 date={calendarDate}
-                onDateChange={(date) => setCalendarDate(typeof date === 'string' ? new Date(date) : date)}
+                onDateChange={(date) => {
+                  console.log('[TaskDayPicker] DatePicker onDateChange called');
+                  setCalendarDate(typeof date === 'string' ? new Date(date) : date);
+                }}
                 minDate={tripStartDate}
                 maxDate={tripEndDate}
               />

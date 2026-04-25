@@ -10,7 +10,9 @@ interface StateManagerProps {
   isDarkMode: boolean;
 }
 
-export const StateManager: React.FC<StateManagerProps> = ({ currentState, onLoadState, isDarkMode }) => {
+export const StateManager: React.FC<StateManagerProps> = React.memo(({ currentState, onLoadState, isDarkMode }) => {
+  console.log('[StateManager] RENDER');
+  
   const [stateCode, setStateCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -135,4 +137,6 @@ export const StateManager: React.FC<StateManagerProps> = ({ currentState, onLoad
       </div>
     </div>
   );
-};
+});
+
+StateManager.displayName = 'StateManager';
