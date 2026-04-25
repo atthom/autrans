@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Accordion } from '@mantine/core';
 import { IconSun, IconMoon } from '@tabler/icons-react';
 import './App.css';
