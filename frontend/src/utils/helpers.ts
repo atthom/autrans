@@ -269,8 +269,8 @@ export const getDayLabel = (
   const date = parseDate(startDate);
   date.setDate(date.getDate() + dayNum - 1);
 
-  // Get day of week abbreviation
-  const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+  // Get full day of week name
+  const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
 
   // Calculate week number (1-based)
   const weekNum = Math.floor((dayNum - 1) / 7) + 1;

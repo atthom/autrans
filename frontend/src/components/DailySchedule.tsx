@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { generateDateRange, getFormattedDate, getDayLabel } from '../utils/helpers';
 import { parseTableData } from '../utils/helpers';
 import type { ScheduleResponse } from '../types';
@@ -12,7 +12,7 @@ interface DailyScheduleProps {
   isDarkMode?: boolean;
 }
 
-export const DailySchedule: React.FC<DailyScheduleProps> = ({
+export const DailySchedule: React.FC<DailyScheduleProps> = React.memo(({
   scheduleData,
   startDate,
   numDays,
@@ -20,7 +20,7 @@ export const DailySchedule: React.FC<DailyScheduleProps> = ({
   displayDaysAs,
   isDarkMode = false,
 }) => {
-  const { headers, rows } = parseTableData(scheduleData);
+  const { headers, rows } = useMemo(() => parseTableData(scheduleData), [scheduleData]);
   const dates = generateDateRange(startDate, numDays);
 
   // headers[0] is "Tasks", rest are day columns
@@ -81,4 +81,6 @@ export const DailySchedule: React.FC<DailyScheduleProps> = ({
       })}
     </div>
   );
-};
+});
+
+DailySchedule.displayName = 'DailySchedule';

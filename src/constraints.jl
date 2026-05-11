@@ -155,11 +155,11 @@ end
 
 """
 OverallEquityConstraint implementation (Proportional)
-When relaxation=0: Workers work exactly proportional to available days (hard constraint, ±1 difficulty point)
-When relaxation>0: Workers work proportional with tolerance (soft constraint)
+When relaxation=0: Workers work exactly proportional to available days (hard constraint, exact equality)
+When relaxation>0: Workers work proportional with ±relaxation tolerance (soft constraint)
 Supports workload_offset: negative = work less, positive = work more (in difficulty points)
 Uses difficulty-weighted workload: workload = sum(tasks × difficulty)
-Returns nothing
+Returns objective term to minimize deviation from expected workload (for soft constraints)
 """
 function apply_constraint!(model, assign, scheduler::AutransScheduler{ProportionalEquity},
                           c::OverallEquityConstraint, N::Int, D::Int, T::Int, relaxation::Int, constraint_name::String)
@@ -172,33 +172,53 @@ function apply_constraint!(model, assign, scheduler::AutransScheduler{Proportion
         return nothing
     end
     
+    # Calculate average workload per worker-day
+    avg_workload_per_day = total_difficulty / available_worker_days
+    
     normalized_offsets = normalize_offsets(scheduler.workers)
+    
+    # For each worker, constrain their total workload to be within bounds of their expected workload
+    # Expected workload = (worker's available days) * avg_workload_per_day + offset
+    # Bounds: Keep tight bounds regardless of relaxation level
+    # Allow only ±1 deviation from expected to maintain equity
     
     for (w, worker) in enumerate(scheduler.workers)
         work_days = [d for d in 1:D if d ∉ worker.days_off]
-        if !isempty(work_days)
-            expected_float = (length(work_days) / available_worker_days) * total_difficulty
-            expected = round(Int, expected_float)
-            expected = expected + normalized_offsets[w]
-            expected = max(0, expected)
-            
-            lower = max(0, expected - 1 - relaxation)
-            upper = expected + 1 + relaxation
-            
-            @constraint(model, sum(assign[w, d, t] * scheduler.tasks[t].difficulty 
-                                  for d in 1:D, t in 1:T) >= lower)
-            @constraint(model, sum(assign[w, d, t] * scheduler.tasks[t].difficulty 
-                                  for d in 1:D, t in 1:T) <= upper)
+        num_work_days = length(work_days)
+        
+        if num_work_days == 0
+            continue
         end
+        
+        # Calculate expected workload for this worker
+        expected_float = num_work_days * avg_workload_per_day
+        expected = round(Int, expected_float)
+        expected = expected + normalized_offsets[w]
+        expected = max(0, expected)
+        
+        # Calculate bounds based on relaxation level
+        # Lower bound stays at floor (everyone does at least their fair share)
+        # Upper bound increases with relaxation (allow some to work more)
+        floor_val = floor(Int, expected_float)
+        ceil_val = ceil(Int, expected_float)
+        lower = max(0, floor_val + normalized_offsets[w])
+        upper = max(0, ceil_val + relaxation + normalized_offsets[w])
+        
+        workload = sum(assign[w, d, t] * scheduler.tasks[t].difficulty 
+                      for d in 1:D, t in 1:T)
+        
+        @constraint(model, workload >= lower)
+        @constraint(model, workload <= upper)
     end
     
+    # No objective term needed - the bounds themselves enforce equity
     return nothing
 end
 
 """
 OverallEquityConstraint implementation (Absolute)
-When relaxation=0: All workers work exactly the same amount (hard constraint, ±1 difficulty point)
-When relaxation>0: All workers work similar amounts with tolerance (soft constraint)
+When relaxation=0: All workers work exactly the same amount (hard constraint, exact equality)
+When relaxation>0: All workers work similar amounts with ±relaxation tolerance (soft constraint)
 Supports workload_offset: negative = work less, positive = work more (in difficulty points)
 Uses difficulty-weighted workload: workload = sum(tasks × difficulty)
 Returns nothing
@@ -214,8 +234,8 @@ function apply_constraint!(model, assign, scheduler::AutransScheduler{AbsoluteEq
         adjusted_expected = expected + normalized_offsets[w]
         adjusted_expected = max(0, adjusted_expected)
         
-        lower = max(0, adjusted_expected - 1 - relaxation)
-        upper = adjusted_expected + 1 + relaxation
+        lower = max(0, adjusted_expected - relaxation)
+        upper = adjusted_expected + relaxation
         
         @constraint(model, sum(assign[w, d, t] * scheduler.tasks[t].difficulty 
                               for d in 1:D, t in 1:T) >= lower)

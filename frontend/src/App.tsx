@@ -168,6 +168,9 @@ function App() {
   };
 
   const handleSubmit = async () => {
+    console.log('[App] ========== handleSubmit CALLED ==========');
+    console.log('[App] isLoading before:', isLoading);
+    
     setIsLoading(true);
     setError(null);
     setSuccessMessage(null);
@@ -213,9 +216,11 @@ function App() {
         soft_constraints: softConstraints,
       };
 
+      console.log('[App] Sending request:', JSON.stringify(request, null, 2));
       setScheduleRequest(request);
 
       const response = await scheduleApi.generateSchedule(request);
+      console.log('[App] Received response:', response);
       setScheduleData(response);
       setSuccessMessage('✅ Schedule generated successfully!');
       
@@ -359,7 +364,12 @@ function App() {
                 isDarkModeActive ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-gray-200'
               }`}>
                 <button
-                  onClick={handleSubmit}
+                  onClick={() => {
+                    console.log('[App] ========== BUTTON CLICKED ==========');
+                    console.log('[App] isLoading:', isLoading);
+                    console.log('[App] Calling handleSubmit...');
+                    handleSubmit();
+                  }}
                   disabled={isLoading}
                   className={`w-full text-white font-bold py-3 px-8 rounded-lg text-lg shadow-lg transition-colors duration-200 ${
                     isLoading

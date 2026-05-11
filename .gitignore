@@ -6,3 +6,8 @@ token.github
 .DS_Store
 Autrans/.DS_Store
 Autrans/ObjectAffectation/
+frontend/android/*
+frontend/.env.production.local
+agentic_report/*
+ui-standalone/*
+outputs/*

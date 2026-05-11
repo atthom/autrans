@@ -22,7 +22,7 @@ type ScheduleRow = {
   [key: string]: string;
 };
 
-export const ScheduleTable: React.FC<ScheduleTableProps> = ({ 
+export const ScheduleTable: React.FC<ScheduleTableProps> = React.memo(({ 
   scheduleData, 
   colors = [],
   startDate,
@@ -37,7 +37,7 @@ export const ScheduleTable: React.FC<ScheduleTableProps> = ({
     colorsLength: colors.length,
     numDays
   });
-  const { headers, rows } = parseTableData(scheduleData);
+  const { headers, rows } = useMemo(() => parseTableData(scheduleData), [scheduleData]);
 
   // Transform day headers based on display mode
   const transformedHeaders = useMemo(() => {
@@ -155,7 +155,9 @@ export const ScheduleTable: React.FC<ScheduleTableProps> = ({
       </table>
     </div>
   );
-};
+});
+
+ScheduleTable.displayName = 'ScheduleTable';
 
 interface AuditTableProps {
   data: {
@@ -171,7 +173,7 @@ type AuditRow = {
 };
 
 export const AuditTable: React.FC<AuditTableProps> = ({ data, title, isDarkMode = false }) => {
-  const { headers, rows } = parseTableData(data);
+  const { headers, rows } = useMemo(() => parseTableData(data), [data]);
 
   // Transform data for TanStack Table
   const tableData = useMemo(() => {

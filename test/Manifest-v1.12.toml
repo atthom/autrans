@@ -2,7 +2,7 @@
 
 julia_version = "1.12.4"
 manifest_format = "2.0"
-project_hash = "0099747fad21efe9f29fea4a3b3734177902e02b"
+project_hash = "7cfcb7aef3b941e6a27e6a2c180231b69473349b"
 
 [[deps.Aqua]]
 deps = ["Compat", "Pkg", "Test"]
@@ -19,7 +19,7 @@ uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
 version = "1.11.0"
 
 [[deps.Autrans]]
-deps = ["DataFrames", "HTTP", "HiGHS", "JSON3", "JuMP", "Oxygen", "Printf"]
+deps = ["DataFrames", "Dates", "HTTP", "HiGHS", "JSON3", "JuMP", "Oxygen", "Printf"]
 path = ".."
 uuid = "1f02543f-5e56-4038-b276-ee84bbffedc8"
 version = "0.1.0"

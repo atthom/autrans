@@ -383,6 +383,14 @@ function solve(scheduler::AutransScheduler)
     if solution !== nothing
         if scheduler.verbose
             println("✅ OPTIMAL SOLUTION at level 1 (strictest constraints)")
+            println("\n" * "="^80)
+            println("✅ SOLUTION FOUND")
+            println("="^80)
+            println("Relaxation level: 1")
+            for (i, constraint) in enumerate(scheduler.soft_constraints)
+                println("  $(constraint.name): relaxation = $(hierarchy[1][i])")
+            end
+            println("="^80)
         end
         return (solution, nothing)
     end
@@ -450,7 +458,7 @@ function solve(scheduler::AutransScheduler)
         println("\nStep 3: Binary search with model reuse...")
     end
     
-    low, high = 2, max_level
+    low, high = 1, max_level
     best_solution = solution
     best_level = max_level
     
