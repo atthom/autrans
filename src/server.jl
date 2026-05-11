@@ -339,38 +339,59 @@ end
 
 # POST /schedule - Generate a complete schedule with all views
 @post "/schedule" function(req::HTTP.Request)
-    # Parse request and create scheduler
-    scheduler, params, error_response = parse_request_and_create_scheduler(req)
-    if error_response !== nothing
-        return error_response
+    try
+        @info "Received /schedule request"
+        
+        # Parse request and create scheduler
+        scheduler, params, error_response = parse_request_and_create_scheduler(req, max_solve_time=120.0)
+        if error_response !== nothing
+            @warn "Failed to parse request"
+            return error_response
+        end
+        
+        @info "Starting schedule solver..."
+        
+        # Solve
+        result, failure_info = solve(scheduler)
+        
+        @info "Solver completed" result_found=(result !== nothing)
+        
+        if result === nothing
+            @warn "No feasible schedule found"
+            # Build failure response
+            failure_dict = build_failure_response(failure_info)
+            return json(failure_dict, status=400)
+        end
+        
+        @info "Generating response data..."
+        
+        # Analyze capacity for successful schedules
+        N = length(scheduler.workers)
+        D = scheduler.num_days
+        T = length(scheduler.tasks)
+        capacity_analysis = Autrans.analyze_capacity(scheduler, N, D, T)
+        
+        # Generate all three views
+        display_data = schedule_to_display(result, scheduler)
+        time_data = schedule_to_time_agg(result, scheduler)
+        jobs_data = schedule_to_jobs_agg(result, scheduler)
+        
+        @info "Sending successful response"
+        
+        return json(Dict(
+            "display" => display_data,
+            "time" => time_data,
+            "jobs" => jobs_data,
+            "capacity_analysis" => capacity_analysis
+        ))
+    catch e
+        @error "Error in /schedule endpoint" exception=(e, catch_backtrace())
+        return json(Dict(
+            "error" => "Internal server error",
+            "msg" => "Failed to generate schedule: $(sprint(showerror, e))",
+            "details" => Dict()
+        ), status=500)
     end
-    
-    # Solve
-    result, failure_info = solve(scheduler)
-    
-    if result === nothing
-        # Build failure response
-        failure_dict = build_failure_response(failure_info)
-        return json(failure_dict, status=400)
-    end
-    
-    # Analyze capacity for successful schedules
-    N = length(scheduler.workers)
-    D = scheduler.num_days
-    T = length(scheduler.tasks)
-    capacity_analysis = Autrans.analyze_capacity(scheduler, N, D, T)
-    
-    # Generate all three views
-    display_data = schedule_to_display(result, scheduler)
-    time_data = schedule_to_time_agg(result, scheduler)
-    jobs_data = schedule_to_jobs_agg(result, scheduler)
-    
-    return json(Dict(
-        "display" => display_data,
-        "time" => time_data,
-        "jobs" => jobs_data,
-        "capacity_analysis" => capacity_analysis
-    ))
 end
 
 """

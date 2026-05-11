@@ -92,6 +92,7 @@ function App() {
   const [error, setError] = useState<FailureResponse | null>(null);
   const [showErrorDialog, setShowErrorDialog] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [accordionValue, setAccordionValue] = useState<string[]>(['general', 'tasks', 'workers']);
 
   // Update state handlers
   const updateState = (updates: Partial<AppState>) => {
@@ -103,25 +104,32 @@ function App() {
       })));
     }
     console.log('[App] updateState - calling setState');
+    
+    // Only trigger auto-regeneration if non-cosmetic settings change
+    // displayDaysAs is purely cosmetic and doesn't affect the schedule calculation
+    const cosmeticOnlyChange = Object.keys(updates).length === 1 && 'displayDaysAs' in updates;
+    
     setState(prev => {
       console.log('[App] setState callback executing');
       const newState = { ...prev, ...updates };
       console.log('[App] setState callback complete');
+      
+      // If a schedule was already generated (either success or failure), trigger auto-regeneration
+      // We check scheduleRequest instead of scheduleData to handle both success and failure cases
+      if (!cosmeticOnlyChange && scheduleRequest !== null) {
+        console.log('[App] Auto-regenerating schedule due to settings change');
+        // Pass the new state directly to avoid closure issues
+        setTimeout(() => handleSubmit(true, newState), 0);
+      } else if (!cosmeticOnlyChange) {
+        // No schedule exists yet, just clear the data
+        setScheduleRequest(null);
+        setError(null);
+        setSuccessMessage(null);
+      }
+      
       return newState;
     });
     console.log('[App] updateState complete');
-    
-    // Only clear schedule if non-cosmetic settings change
-    // displayDaysAs is purely cosmetic and doesn't affect the schedule calculation
-    const cosmeticOnlyChange = Object.keys(updates).length === 1 && 'displayDaysAs' in updates;
-    
-    if (!cosmeticOnlyChange) {
-      // Clear schedule data when settings change to prevent state mismatches
-      setScheduleData(null);
-      setScheduleRequest(null);
-      setError(null);
-      setSuccessMessage(null);
-    }
   };
 
   // REMOVED: Problematic useEffect that was causing infinite loops
@@ -167,21 +175,33 @@ function App() {
     'One Task Per Day': 'OneTaskPerDay',
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (isAutoRegeneration: boolean = false, stateOverride?: AppState) => {
     console.log('[App] ========== handleSubmit CALLED ==========');
+    console.log('[App] isAutoRegeneration:', isAutoRegeneration);
+    console.log('[App] stateOverride provided:', !!stateOverride);
     console.log('[App] isLoading before:', isLoading);
     
-    setIsLoading(true);
-    setError(null);
-    setSuccessMessage(null);
-    setScheduleData(null);
+    // Use provided state or current state
+    const currentState = stateOverride ?? state;
     
-    // Scroll to top of page
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Only show loading state and UI feedback for manual submits
+    if (!isAutoRegeneration) {
+      setIsLoading(true);
+      setError(null);
+      setSuccessMessage(null);
+      setScheduleData(null);
+      
+      // Scroll to top of page
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      // For auto-regeneration, just clear error state
+      setError(null);
+      setSuccessMessage(null);
+    }
 
     try {
-      // Build request payload
-      const enabledConstraints = state.constraints.filter(c => c.enabled);
+      // Build request payload using currentState
+      const enabledConstraints = currentState.constraints.filter(c => c.enabled);
       const hardConstraints = enabledConstraints
         .filter(c => c.type === 'hard')
         .map(c => constraintNameMap[c.name]);
@@ -190,7 +210,7 @@ function App() {
         .map(c => constraintNameMap[c.name]);
 
       // Convert tasks to backend format: [name, num_workers, difficulty, ...selected_days]
-      const tasks = state.tasks.map(task => [
+      const tasks = currentState.tasks.map(task => [
         task.name,
         task.num_workers,
         task.difficulty,
@@ -199,7 +219,7 @@ function App() {
 
       // Convert workers to backend format: [name, days_off, task_preferences, workload_offset]
       // Filter out any null values that might have been introduced from loaded state
-      const workers: Array<[string, number[], number[], number]> = state.workers.map(worker => [
+      const workers: Array<[string, number[], number[], number]> = currentState.workers.map(worker => [
         worker.name,
         worker.days_off.filter((d): d is number => d !== null && d !== undefined),
         worker.task_preferences.filter((p): p is number => p !== null && p !== undefined),
@@ -209,9 +229,9 @@ function App() {
       const request: ScheduleRequest = {
         workers,
         tasks,
-        nb_days: state.numDays,
+        nb_days: currentState.numDays,
         task_per_day: tasks.map(t => t[0]),
-        balance_daysoff: state.balanceDaysOff,
+        balance_daysoff: currentState.balanceDaysOff,
         hard_constraints: hardConstraints,
         soft_constraints: softConstraints,
       };
@@ -222,23 +242,39 @@ function App() {
       const response = await scheduleApi.generateSchedule(request);
       console.log('[App] Received response:', response);
       setScheduleData(response);
-      setSuccessMessage('✅ Schedule generated successfully!');
       
-      // Auto-hide success message after 5 seconds
-      setTimeout(() => setSuccessMessage(null), 5000);
+      // Only show success message and collapse accordion for manual submits
+      if (!isAutoRegeneration) {
+        setSuccessMessage('✅ Schedule generated successfully!');
+        
+        // Collapse the settings accordion
+        setAccordionValue([]);
+        
+        // Auto-hide success message after 5 seconds
+        setTimeout(() => setSuccessMessage(null), 5000);
+      }
     } catch (err: any) {
-      if (isFailureResponse(err)) {
-        setError(err.response.data);
-        setShowErrorDialog(true);
-      } else {
-        setError({
-          msg: err.message || 'An unexpected error occurred',
-          details: undefined,
-        });
-        setShowErrorDialog(true);
+      // Clear schedule data on error
+      setScheduleData(null);
+      
+      // Only show error modal for manual submits
+      if (!isAutoRegeneration) {
+        if (isFailureResponse(err)) {
+          setError(err.response.data);
+          setShowErrorDialog(true);
+        } else {
+          setError({
+            msg: err.message || 'An unexpected error occurred',
+            details: undefined,
+          });
+          setShowErrorDialog(true);
+        }
       }
     } finally {
-      setIsLoading(false);
+      // Only update loading state for manual submits
+      if (!isAutoRegeneration) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -285,9 +321,10 @@ function App() {
               {/* Collapsible Sections */}
               <Accordion
                 multiple
-                defaultValue={['general', 'tasks', 'workers']}
+                value={accordionValue}
                 onChange={(value) => {
                   console.log('[App] Main Accordion onChange:', value);
+                  setAccordionValue(value);
                 }}
               >
                 {/* General Settings */}
@@ -367,8 +404,8 @@ function App() {
                   onClick={() => {
                     console.log('[App] ========== BUTTON CLICKED ==========');
                     console.log('[App] isLoading:', isLoading);
-                    console.log('[App] Calling handleSubmit...');
-                    handleSubmit();
+                    console.log('[App] Calling handleSubmit (manual)...');
+                    handleSubmit(false);
                   }}
                   disabled={isLoading}
                   className={`w-full text-white font-bold py-3 px-8 rounded-lg text-lg shadow-lg transition-colors duration-200 ${
